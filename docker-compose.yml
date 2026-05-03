@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fizrmm}
+      POSTGRES_USER: ${POSTGRES_USER:-fizrmm_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fizrmm-admin-dev-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      FIZRMM_HOST: 0.0.0.0
+      FIZRMM_PORT: 8000
+      FIZRMM_PUBLIC_URL: ${FIZRMM_PUBLIC_URL:-http://127.0.0.1:8000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://fizrmm_app:fizrmm-app-dev-password@postgres:5432/fizrmm}
+      MESHCENTRAL_URL: ${MESHCENTRAL_URL:-}
+      MESHCENTRAL_AGENT_INSTALLER_URL: ${MESHCENTRAL_AGENT_INSTALLER_URL:-}
+      MESHCENTRAL_AGENT_INSTALL_ARGS: ${MESHCENTRAL_AGENT_INSTALL_ARGS:-}
+      ZABBIX_SERVER: ${ZABBIX_SERVER:-}
+      ZABBIX_AGENT_INSTALLER_URL: ${ZABBIX_AGENT_INSTALLER_URL:-}
+      ZABBIX_AGENT_INSTALL_ARGS: ${ZABBIX_AGENT_INSTALL_ARGS:-}
+      WAZUH_MANAGER: ${WAZUH_MANAGER:-}
+      WAZUH_AGENT_INSTALLER_URL: ${WAZUH_AGENT_INSTALLER_URL:-}
+      WAZUH_AGENT_INSTALL_ARGS: ${WAZUH_AGENT_INSTALL_ARGS:-}
+      SALT_MASTER: ${SALT_MASTER:-}
+      SALT_MINION_INSTALLER_URL: ${SALT_MINION_INSTALLER_URL:-}
+      SALT_MINION_INSTALL_ARGS: ${SALT_MINION_INSTALL_ARGS:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  portal:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_FIZRMM_API_BASE: ${FIZRMM_API_BASE:-http://127.0.0.1:8000}
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  keycloak:
+    profiles: ["infra"]
+    image: quay.io/keycloak/keycloak:latest
+    command: ["start-dev"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nats:
+    profiles: ["infra"]
+    image: nats:latest
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  opensearch:
+    profiles: ["infra"]
+    image: opensearchproject/opensearch:latest
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "false"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-FizRMM-dev-password-1!}
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+
+volumes:
+  postgres_data:
+  opensearch_data:
