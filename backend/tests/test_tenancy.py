@@ -1,6 +1,6 @@
 import unittest
 
-from fizrmm.models import AccessDenied, TenantContext
+from fizrmm.models import AccessDenied, TenantContext, ValidationError
 from fizrmm.store import seed_store
 
 
@@ -85,6 +85,48 @@ class TenancyTests(unittest.TestCase):
         agents = self.store.list_agent_health(self.acme_tech, claim["asset_id"])
         self.assertEqual(report["status"], "completed")
         self.assertEqual(agents[0].agent, "meshcentral")
+
+    def test_enrollment_token_cannot_be_claimed_twice(self):
+        enrollment = self.store.create_enrollment(
+            self.acme_tech,
+            "org_acme",
+            "Acme HQ",
+            {"portal_url": "http://127.0.0.1:8000"},
+            "2099-01-01T00:00:00+00:00",
+        )
+
+        self.store.claim_enrollment(enrollment["token"], "ACME-ONE", "Windows 11 Pro")
+
+        with self.assertRaises(ValidationError):
+            self.store.claim_enrollment(enrollment["token"], "ACME-TWO", "Windows 11 Pro")
+
+    def test_expired_enrollment_token_is_rejected(self):
+        enrollment = self.store.create_enrollment(
+            self.acme_tech,
+            "org_acme",
+            "Acme HQ",
+            {"portal_url": "http://127.0.0.1:8000"},
+            "2000-01-01T00:00:00+00:00",
+        )
+
+        with self.assertRaises(ValidationError):
+            self.store.claim_enrollment(enrollment["token"], "ACME-OLD", "Windows 11 Pro")
+
+    def test_invalid_agent_report_is_rejected(self):
+        enrollment = self.store.create_enrollment(
+            self.acme_tech,
+            "org_acme",
+            "Acme HQ",
+            {"portal_url": "http://127.0.0.1:8000"},
+            "2099-01-01T00:00:00+00:00",
+        )
+        self.store.claim_enrollment(enrollment["token"], "ACME-LAPTOP-02", "Windows 11 Pro")
+
+        with self.assertRaises(ValidationError):
+            self.store.report_enrollment(
+                enrollment["token"],
+                [{"agent": "unknown-agent", "status": "installed"}],
+            )
 
 
 if __name__ == "__main__":

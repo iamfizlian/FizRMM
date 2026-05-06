@@ -39,6 +39,10 @@ class NotFound(Exception):
     """Raised when a requested domain object does not exist."""
 
 
+class ValidationError(ValueError):
+    """Raised when request data fails domain validation."""
+
+
 @dataclass(frozen=True)
 class TenantContext:
     user_id: str
@@ -136,6 +140,10 @@ class EndpointEnrollment:
     claimed_at: str | None
     completed_at: str | None
     config: dict[str, Any]
+
+
+def parse_iso_datetime(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def utcnow_iso() -> str:

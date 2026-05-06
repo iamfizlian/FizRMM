@@ -148,7 +148,7 @@ button {
 
 .status-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
   gap: 12px;
   margin: 24px 0;
 }
@@ -282,7 +282,74 @@ button {
   color: #6c7a80;
 }
 
+.integration-panel {
+  border-top: 1px solid #dbe3e1;
+  padding-top: 18px;
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.connector-grid,
+.integration-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.connector-card,
+.integration-card {
+  border: 1px solid #dbe3e1;
+  border-radius: 8px;
+  background: #fbfcfc;
+  padding: 12px;
+  min-width: 0;
+}
+
+.connector-card {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+}
+
+.connector-card strong,
+.connector-card span,
+.integration-card strong,
+.integration-card span,
+.integration-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.connector-card span {
+  grid-column: 2;
+  color: #60717a;
+  font-size: 13px;
+}
+
+.integration-card span {
+  color: #60717a;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.integration-card.configured {
+  border-color: #79b99b;
+  background: #f3fbf7;
+}
+
+.integration-card.missing {
+  border-color: #d8b86d;
+  background: #fffaf0;
+}
+
+.integration-card small {
+  color: #4f6068;
+}
+
 .script-bar {
+  margin-top: 18px;
   border-bottom: 1px solid #dbe3e1;
   padding-bottom: 18px;
 }
@@ -335,7 +402,9 @@ button {
   }
 
   .status-strip,
-  .agents {
+  .agents,
+  .connector-grid,
+  .integration-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -352,7 +421,9 @@ button {
   }
 
   .status-strip,
-  .agents {
+  .agents,
+  .connector-grid,
+  .integration-grid {
     grid-template-columns: 1fr;
   }
 }

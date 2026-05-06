@@ -6,8 +6,10 @@ import {
   Boxes,
   CheckCircle2,
   Command,
+  Link2,
   MonitorCog,
   Play,
+  PlugZap,
   Radio,
   RefreshCw,
   Search,
@@ -46,6 +48,8 @@ function App() {
   const [selectedAssetId, setSelectedAssetId] = useState(null);
   const [assetDetail, setAssetDetail] = useState(null);
   const [agents, setAgents] = useState([]);
+  const [integrations, setIntegrations] = useState([]);
+  const [integrationReady, setIntegrationReady] = useState(false);
   const [timeline, setTimeline] = useState([]);
   const [scripts, setScripts] = useState([]);
   const [notice, setNotice] = useState("Loading control plane");
@@ -73,7 +77,14 @@ function App() {
       ]);
       setAssets(assetPayload.assets);
       setScripts(scriptPayload.scripts);
-      setSelectedAssetId((current) => current || assetPayload.assets[0]?.id || null);
+      setSelectedAssetId((current) => (
+        assetPayload.assets.some((asset) => asset.id === current)
+          ? current
+          : assetPayload.assets[0]?.id || null
+      ));
+      const integrationPayload = await api("/api/integrations", orgId, role);
+      setIntegrations(integrationPayload.integrations);
+      setIntegrationReady(integrationPayload.ready_for_real_endpoints);
       setNotice("Portal connected");
     } catch (error) {
       setNotice(error.message);
@@ -168,6 +179,7 @@ function App() {
           <Stat icon={<Activity />} label="Visible assets" value={assets.length} />
           <Stat icon={<Radio />} label="Agents tracked" value={agents.length || "-"} />
           <Stat icon={<Command />} label="Scripts" value={scripts.length} />
+          <Stat icon={<PlugZap />} label="Endpoint readiness" value={integrationReady ? "Ready" : "Needs config"} />
           <Stat icon={<CheckCircle2 />} label="State" value={notice} />
         </section>
 
@@ -212,6 +224,32 @@ function App() {
                     </div>
                   ))}
                 </div>
+
+                <section className="integration-panel">
+                  <h3>Connector identities</h3>
+                  <div className="connector-grid">
+                    {(assetDetail?.connectors || []).map((connector) => (
+                      <div className="connector-card" key={`${connector.connector}-${connector.external_id}`}>
+                        <Link2 size={16} />
+                        <strong>{connector.connector}</strong>
+                        <span>{connector.external_id}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="integration-panel">
+                  <h3>Integration readiness</h3>
+                  <div className="integration-grid">
+                    {integrations.map((integration) => (
+                      <div className={`integration-card ${integration.configured ? "configured" : "missing"}`} key={integration.id}>
+                        <strong>{integration.name}</strong>
+                        <span>{integration.state}</span>
+                        <small>{integration.summary}</small>
+                      </div>
+                    ))}
+                  </div>
+                </section>
 
                 <div className="script-bar">
                   {scripts.map((script) => (

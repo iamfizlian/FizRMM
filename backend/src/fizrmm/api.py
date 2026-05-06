@@ -9,8 +9,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlparse
 
+from .auth import context_from_authorization
 from .bootstrap import render_windows_bootstrap
-from .models import AccessDenied, NotFound, TenantContext, to_jsonable
+from .integrations.config import load_runtime_config, runtime_bootstrap_value, runtime_service_value
+from .models import AccessDenied, NotFound, TenantContext, ValidationError, to_jsonable
 from .store import InMemoryControlPlaneStore, seed_store
 
 
@@ -36,29 +38,220 @@ def deployment_config() -> dict[str, object]:
     return {
         "portal_url": os.getenv("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000"),
         "meshcentral": {
-            "server_url": os.getenv("MESHCENTRAL_URL", ""),
-            "installer_url": os.getenv("MESHCENTRAL_AGENT_INSTALLER_URL", ""),
-            "install_args": os.getenv("MESHCENTRAL_AGENT_INSTALL_ARGS", ""),
+            "server_url": runtime_bootstrap_value("meshcentral", "server_url", os.getenv("MESHCENTRAL_URL", "")),
+            "installer_url": runtime_bootstrap_value(
+                "meshcentral",
+                "installer_url",
+                os.getenv("MESHCENTRAL_AGENT_INSTALLER_URL", ""),
+            ),
+            "install_args": runtime_bootstrap_value(
+                "meshcentral",
+                "install_args",
+                os.getenv("MESHCENTRAL_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "zabbix": {
-            "server_url": os.getenv("ZABBIX_SERVER", ""),
-            "installer_url": os.getenv("ZABBIX_AGENT_INSTALLER_URL", ""),
-            "install_args": os.getenv("ZABBIX_AGENT_INSTALL_ARGS", ""),
+            "server_url": runtime_bootstrap_value("zabbix", "server_url", os.getenv("ZABBIX_SERVER", "")),
+            "installer_url": runtime_bootstrap_value(
+                "zabbix",
+                "installer_url",
+                os.getenv("ZABBIX_AGENT_INSTALLER_URL", ""),
+            ),
+            "install_args": runtime_bootstrap_value(
+                "zabbix",
+                "install_args",
+                os.getenv("ZABBIX_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "wazuh": {
-            "manager_url": os.getenv("WAZUH_MANAGER", ""),
-            "installer_url": os.getenv("WAZUH_AGENT_INSTALLER_URL", ""),
-            "install_args": os.getenv("WAZUH_AGENT_INSTALL_ARGS", ""),
+            "manager_url": runtime_bootstrap_value("wazuh", "manager_url", os.getenv("WAZUH_MANAGER", "")),
+            "installer_url": runtime_bootstrap_value(
+                "wazuh",
+                "installer_url",
+                os.getenv("WAZUH_AGENT_INSTALLER_URL", ""),
+            ),
+            "install_args": runtime_bootstrap_value("wazuh", "install_args", os.getenv("WAZUH_AGENT_INSTALL_ARGS", "")),
         },
         "salt": {
-            "master_url": os.getenv("SALT_MASTER", ""),
-            "installer_url": os.getenv("SALT_MINION_INSTALLER_URL", ""),
-            "install_args": os.getenv("SALT_MINION_INSTALL_ARGS", ""),
+            "master_url": runtime_bootstrap_value("salt", "master_url", os.getenv("SALT_MASTER", "")),
+            "installer_url": runtime_bootstrap_value(
+                "salt",
+                "installer_url",
+                os.getenv("SALT_MINION_INSTALLER_URL", ""),
+            ),
+            "install_args": runtime_bootstrap_value("salt", "install_args", os.getenv("SALT_MINION_INSTALL_ARGS", "")),
         },
     }
 
 
+def integration_status() -> dict[str, object]:
+    config = deployment_config()
+    runtime_config = load_runtime_config()
+    identity_missing = [
+        name
+        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET")
+        if not (os.getenv(name, "").strip() or _runtime_identity_value(name))
+    ]
+    integrations = [
+        _identity_integration(identity_missing),
+        _agent_integration(
+            "meshcentral",
+            "MeshCentral",
+            config["meshcentral"],  # type: ignore[index]
+            required=("server_url", "installer_url"),
+        ),
+        _agent_integration(
+            "zabbix",
+            "Zabbix",
+            config["zabbix"],  # type: ignore[index]
+            required=("server_url", "installer_url"),
+        ),
+        _agent_integration(
+            "wazuh",
+            "Wazuh",
+            config["wazuh"],  # type: ignore[index]
+            required=("manager_url", "installer_url"),
+        ),
+        _agent_integration(
+            "salt",
+            "Salt",
+            config["salt"],  # type: ignore[index]
+            required=("master_url", "installer_url"),
+        ),
+        _runtime_only_integration("opensearch", "OpenSearch"),
+        _runtime_only_integration("nats", "NATS JetStream"),
+    ]
+    configured_count = sum(1 for item in integrations if item["configured"])
+    initialized_count = sum(1 for item in integrations if item["initialized"])
+    return {
+        "auth_mode": "header-simulated",
+        "runtime_config_loaded": bool(runtime_config),
+        "ready_for_real_endpoints": configured_count == len(integrations) and initialized_count == len(integrations),
+        "configured_count": configured_count,
+        "initialized_count": initialized_count,
+        "total_count": len(integrations),
+        "integrations": integrations,
+    }
+
+
+def _identity_integration(missing: list[str]) -> dict[str, object]:
+    runtime = _runtime_integration("identity")
+    initialized = _is_initialized(runtime)
+    configured = not missing
+    return {
+        "id": "identity",
+        "name": "Keycloak / SSO",
+        "state": _integration_state(configured, initialized, "simulated"),
+        "configured": configured,
+        "initialized": initialized,
+        "adapter_implemented": False,
+        "service_url": runtime_service_value("identity", "url", os.getenv("KEYCLOAK_URL", "")),
+        "summary": (
+            "OIDC settings are present for a Keycloak-backed auth integration."
+            if configured
+            else "Technician identity is currently simulated with X-FizRMM-* headers."
+        ),
+        "missing": missing,
+        "init": runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {},
+    }
+
+
+def _agent_integration(
+    integration_id: str,
+    name: str,
+    config: object,
+    required: tuple[str, ...],
+) -> dict[str, object]:
+    values = config if isinstance(config, dict) else {}
+    missing = [field for field in required if not str(values.get(field) or "").strip()]
+    runtime = _runtime_integration(integration_id)
+    configured = not missing
+    initialized = _is_initialized(runtime)
+    return {
+        "id": integration_id,
+        "name": name,
+        "state": _integration_state(configured, initialized),
+        "configured": configured,
+        "initialized": initialized,
+        "adapter_implemented": False,
+        "service_url": _service_url(integration_id),
+        "summary": (
+            f"{name} has the minimum URL configuration for bootstrap."
+            if configured
+            else f"{name} bootstrap/install settings are incomplete."
+        ),
+        "missing": missing,
+        "init": runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {},
+    }
+
+
+def _runtime_only_integration(integration_id: str, name: str) -> dict[str, object]:
+    runtime = _runtime_integration(integration_id)
+    configured = bool(runtime_service_value(integration_id, "url", ""))
+    initialized = _is_initialized(runtime)
+    return {
+        "id": integration_id,
+        "name": name,
+        "state": _integration_state(configured, initialized),
+        "configured": configured,
+        "initialized": initialized,
+        "adapter_implemented": False,
+        "service_url": _service_url(integration_id),
+        "summary": f"{name} runtime service configuration is {'present' if configured else 'missing'}.",
+        "missing": [] if configured else ["service.url"],
+        "init": runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {},
+    }
+
+
+def _runtime_integration(integration_id: str) -> dict[str, object]:
+    integrations = load_runtime_config().get("integrations", {})
+    value = integrations.get(integration_id) if isinstance(integrations, dict) else None
+    return value if isinstance(value, dict) else {}
+
+
+def _runtime_identity_value(env_name: str) -> str:
+    key_map = {
+        "KEYCLOAK_URL": ("url",),
+        "OIDC_CLIENT_ID": ("client_id",),
+        "OIDC_CLIENT_SECRET": ("client_secret",),
+    }
+    keys = key_map.get(env_name, ())
+    for key in keys:
+        value = runtime_service_value("identity", key, "")
+        if value:
+            return value
+    return ""
+
+
+def _service_url(integration_id: str) -> str:
+    for key in ("url", "api_url"):
+        value = runtime_service_value(integration_id, key, "")
+        if value:
+            return value
+    return ""
+
+
+def _is_initialized(runtime: dict[str, object]) -> bool:
+    init = runtime.get("init")
+    if not isinstance(init, dict):
+        return False
+    return bool(init.get("runtime_config_written"))
+
+
+def _integration_state(configured: bool, initialized: bool, fallback: str = "missing_config") -> str:
+    if configured and initialized:
+        return "initialized"
+    if configured:
+        return "configured"
+    if initialized:
+        return "init_incomplete"
+    return fallback
+
+
 def context_from_headers(headers: Any) -> TenantContext:
+    token_context = context_from_authorization(headers.get("Authorization"))
+    if token_context is not None:
+        return token_context
     role = headers.get("X-FizRMM-Role", "technician")
     org_header = headers.get("X-FizRMM-Orgs", "org_acme")
     org_ids = tuple(org.strip() for org in org_header.split(",") if org.strip())
@@ -100,6 +293,10 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
         except ValueError as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        except (KeyError, TypeError) as exc:
+            self._send_json({"error": f"invalid request: {exc}"}, status=HTTPStatus.BAD_REQUEST)
+        except Exception:
+            self._send_json({"error": "internal server error"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
     def _route_get(self, context: TenantContext, parts: list[str]) -> Any:
         if parts == ["health"]:
@@ -120,6 +317,8 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             return {"events": STORE.list_timeline(context, parts[2])}
         if parts == ["api", "scripts"]:
             return {"scripts": STORE.list_scripts(context)}
+        if parts == ["api", "integrations"]:
+            return integration_status()
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "bootstrap.ps1":
             enrollment = STORE.get_enrollment_by_token(parts[2])
             portal_url = str(enrollment.config.get("portal_url") or deployment_config()["portal_url"])
@@ -130,6 +329,8 @@ class FizRmmHandler(BaseHTTPRequestHandler):
         if parts == ["api", "enrollments"]:
             payload = self._read_payload()
             expires_hours = int(payload.get("expires_hours", 24))
+            if expires_hours < 1 or expires_hours > 168:
+                raise ValidationError("expires_hours must be between 1 and 168")
             expires_at = datetime.now(UTC) + timedelta(hours=expires_hours)
             return STORE.create_enrollment(
                 context=context,
@@ -171,7 +372,13 @@ class FizRmmHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         if length == 0:
             return {}
-        return json.loads(self.rfile.read(length).decode("utf-8"))
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValidationError("request body must be valid JSON") from exc
+        if not isinstance(payload, dict):
+            raise ValidationError("request body must be a JSON object")
+        return payload
 
     def _send_json(self, payload: Any, status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(to_jsonable(payload), indent=2).encode("utf-8")

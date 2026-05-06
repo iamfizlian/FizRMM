@@ -12,6 +12,14 @@ You need Docker Compose. From the repo root:
 docker compose up --build
 ```
 
+To start the integrated lab stack scaffold, use:
+
+```bash
+docker compose --profile full up --build
+```
+
+The `full` profile adds Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, OpenSearch, and a `fizrmm-init` job that writes runtime integration config for the API.
+
 Open:
 
 - Portal: `http://127.0.0.1:5173/`
@@ -26,6 +34,8 @@ docker compose down
 For the full Docker setup guide, see [docs/INSTALL.md](docs/INSTALL.md).
 
 Endpoint deployment is partially implemented: the control plane can issue enrollment tokens and a Windows bootstrap script. See [docs/ENDPOINT_DEPLOYMENT.md](docs/ENDPOINT_DEPLOYMENT.md) for how PCs are enrolled and what still needs real subsystem integration.
+
+The staged path to a complete integrated RMM is tracked in [docs/INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md).
 
 ## Smoke Checks
 
@@ -55,6 +65,7 @@ npm run build
 - Canonical domain model for orgs, assets, connector IDs, agent health, scripts, audit, and timeline events.
 - PostgreSQL schema draft with row-level security policies.
 - React portal shell scaffold for the technician experience.
+- Integration readiness API and portal visibility for Keycloak, MeshCentral, Salt, Zabbix, and Wazuh configuration.
 - Optional Docker Compose profile for Keycloak, NATS, and OpenSearch.
 
 ## Not Yet Implemented

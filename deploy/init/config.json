@@ -1,0 +1,107 @@
+{
+  "stack": "fizrmm-full",
+  "integrations": {
+    "identity": {
+      "name": "Keycloak / SSO",
+      "service": {
+        "url": "http://keycloak:8080",
+        "public_url": "http://127.0.0.1:8080",
+        "realm": "fizrmm",
+        "client_id": "fizrmm-portal",
+        "issuer_url": "http://127.0.0.1:8080/realms/fizrmm",
+        "jwks_url": "http://127.0.0.1:8080/realms/fizrmm/protocol/openid-connect/certs"
+      },
+      "bootstrap": {},
+      "init": {
+        "status": "planned",
+        "message": "Realm/client/roles bootstrap job scaffolded; API wiring is next."
+      }
+    },
+    "meshcentral": {
+      "name": "MeshCentral",
+      "service": {
+        "url": "http://meshcentral:443",
+        "api_token_ref": "meshcentral_api_token"
+      },
+      "bootstrap": {
+        "server_url": "http://meshcentral:443",
+        "installer_url": "",
+        "install_args": ""
+      },
+      "init": {
+        "status": "planned",
+        "message": "Device groups/API token/session policy bootstrap job scaffolded."
+      }
+    },
+    "salt": {
+      "name": "Salt",
+      "service": {
+        "api_url": "http://salt-master:8000",
+        "username": "fizrmm"
+      },
+      "bootstrap": {
+        "master_url": "salt-master",
+        "installer_url": "",
+        "install_args": ""
+      },
+      "init": {
+        "status": "planned",
+        "message": "eAuth/ACL/service credential bootstrap job scaffolded."
+      }
+    },
+    "zabbix": {
+      "name": "Zabbix",
+      "service": {
+        "url": "http://zabbix-web:8080/api_jsonrpc.php",
+        "api_token_ref": "zabbix_api_token"
+      },
+      "bootstrap": {
+        "server_url": "zabbix-server",
+        "installer_url": "",
+        "install_args": ""
+      },
+      "init": {
+        "status": "planned",
+        "message": "Host groups/templates/API token/webhook bootstrap job scaffolded."
+      }
+    },
+    "wazuh": {
+      "name": "Wazuh",
+      "service": {
+        "url": "https://wazuh-manager:55000",
+        "api_token_ref": "wazuh_api_token"
+      },
+      "bootstrap": {
+        "manager_url": "wazuh-manager",
+        "installer_url": "",
+        "install_args": ""
+      },
+      "init": {
+        "status": "planned",
+        "message": "Enrollment groups/labels/event forwarding bootstrap job scaffolded."
+      }
+    },
+    "opensearch": {
+      "name": "OpenSearch",
+      "service": {
+        "url": "https://opensearch:9200"
+      },
+      "bootstrap": {},
+      "init": {
+        "status": "planned",
+        "message": "Index templates/DLS/retention bootstrap job scaffolded."
+      }
+    },
+    "nats": {
+      "name": "NATS JetStream",
+      "service": {
+        "url": "nats://nats:4222"
+      },
+      "bootstrap": {},
+      "init": {
+        "status": "planned",
+        "message": "Streams and durable consumer bootstrap job scaffolded."
+      }
+    }
+  }
+}

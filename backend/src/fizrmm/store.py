@@ -18,6 +18,8 @@ from .models import (
     TenantContext,
     TimelineEvent,
     TimelineKind,
+    ValidationError,
+    parse_iso_datetime,
     utcnow_iso,
 )
 
@@ -216,13 +218,26 @@ class InMemoryControlPlaneStore:
             raise NotFound("enrollment token not found")
         return enrollment
 
+    def _active_enrollment(self, token: str) -> EndpointEnrollment:
+        enrollment = self.get_enrollment_by_token(token)
+        if enrollment.status != "active":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
+        return enrollment
+
     def claim_enrollment(
         self,
         token: str,
         hostname: str,
         operating_system: str,
     ) -> dict[str, object]:
-        enrollment = self.get_enrollment_by_token(token)
+        if not hostname.strip():
+            raise ValidationError("hostname is required")
+        if not operating_system.strip():
+            raise ValidationError("operating_system is required")
+
+        enrollment = self._active_enrollment(token)
         asset_id = enrollment.asset_id or f"asset-{uuid4()}"
         if asset_id not in self.assets:
             self.assets[asset_id] = Asset(
@@ -268,10 +283,22 @@ class InMemoryControlPlaneStore:
         agents: list[dict[str, object]],
     ) -> dict[str, object]:
         enrollment = self.get_enrollment_by_token(token)
+        if enrollment.status != "claimed":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
         if enrollment.asset_id is None:
             raise ValueError("enrollment must be claimed before reporting")
+        if not isinstance(agents, list):
+            raise ValidationError("agents must be a list")
         for agent_report in agents:
-            agent = AgentKind(str(agent_report["agent"]))
+            if not isinstance(agent_report, dict):
+                raise ValidationError("agent report entries must be objects")
+            agent_name = str(agent_report.get("agent") or "")
+            try:
+                agent = AgentKind(agent_name)
+            except ValueError as exc:
+                raise ValidationError(f"unsupported agent: {agent_name}") from exc
             external_id = str(agent_report.get("external_id") or f"{agent.value}:{enrollment.asset_id}")
             existing_connector = next(
                 (

@@ -22,6 +22,9 @@ from .models import (
     TenantContext,
     TimelineEvent,
     TimelineKind,
+    ValidationError,
+    parse_iso_datetime,
+    utcnow_iso,
 )
 
 
@@ -297,6 +300,14 @@ class PostgresControlPlaneStore:
             raise NotFound("enrollment token not found")
         return self._enrollment(row)
 
+    def _active_enrollment(self, token: str) -> EndpointEnrollment:
+        enrollment = self.get_enrollment_by_token(token)
+        if enrollment.status != "active":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
+        return enrollment
+
     def claim_enrollment(
         self,
         token: str,
@@ -305,7 +316,12 @@ class PostgresControlPlaneStore:
     ) -> dict[str, object]:
         from psycopg.types.json import Jsonb
 
-        enrollment = self.get_enrollment_by_token(token)
+        if not hostname.strip():
+            raise ValidationError("hostname is required")
+        if not operating_system.strip():
+            raise ValidationError("operating_system is required")
+
+        enrollment = self._active_enrollment(token)
         asset_id = enrollment.asset_id or f"asset-{uuid4()}"
         with self._system_cursor() as cur:
             cur.execute(
@@ -359,12 +375,24 @@ class PostgresControlPlaneStore:
         from psycopg.types.json import Jsonb
 
         enrollment = self.get_enrollment_by_token(token)
+        if enrollment.status != "claimed":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
         if enrollment.asset_id is None:
             raise ValueError("enrollment must be claimed before reporting")
+        if not isinstance(agents, list):
+            raise ValidationError("agents must be a list")
 
         with self._system_cursor() as cur:
             for agent_report in agents:
-                agent = str(agent_report["agent"])
+                if not isinstance(agent_report, dict):
+                    raise ValidationError("agent report entries must be objects")
+                agent = str(agent_report.get("agent") or "")
+                try:
+                    AgentKind(agent)
+                except ValueError as exc:
+                    raise ValidationError(f"unsupported agent: {agent}") from exc
                 external_id = str(agent_report.get("external_id") or f"{agent}:{enrollment.asset_id}")
                 cur.execute(
                     """
