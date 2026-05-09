@@ -89,7 +89,7 @@ def integration_status() -> dict[str, object]:
     runtime_config = load_runtime_config()
     identity_missing = [
         name
-        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET")
+        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID")
         if not (os.getenv(name, "").strip() or _runtime_identity_value(name))
     ]
     integrations = [
@@ -235,7 +235,8 @@ def _is_initialized(runtime: dict[str, object]) -> bool:
     init = runtime.get("init")
     if not isinstance(init, dict):
         return False
-    return bool(init.get("runtime_config_written"))
+    status = str(init.get("status") or "").strip().lower()
+    return status in {"configured", "initialized", "ready"}
 
 
 def _integration_state(configured: bool, initialized: bool, fallback: str = "missing_config") -> str:

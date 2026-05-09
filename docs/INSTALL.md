@@ -23,6 +23,8 @@ docker compose version
 
 ## 2. Start FizRMM
 
+If you are using GitHub Codespaces, first see [GitHub Codespaces](CODESPACES.md) for forwarded ports and dev container setup.
+
 From the repository root:
 
 ```bash
