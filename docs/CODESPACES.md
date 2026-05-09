@@ -24,6 +24,13 @@ Open the forwarded ports panel and use:
 
 The portal should be available through the Codespaces forwarded URL for port `5173`; the API health endpoint should be available through the forwarded URL for port `8000`.
 
+If PostgreSQL exits with a `/var/lib/postgresql/data` volume-layout error, reset the development volumes and start the stack again:
+
+```bash
+docker compose down --volumes
+docker compose up --build
+```
+
 ## Run the full lab scaffold
 
 The full profile is heavier and may need a larger Codespaces machine size because it starts Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, and OpenSearch in addition to the app:
