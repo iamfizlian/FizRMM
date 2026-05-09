@@ -18,11 +18,18 @@ docker compose up --build
 
 Open the forwarded ports panel and use:
 
-- `5173` for the FizRMM portal.
-- `8000` for the FizRMM API.
+- `5173` for the FizRMM portal. This is the web GUI.
+- `8000` for the FizRMM API, if you want to inspect API responses directly.
 - `5432` for PostgreSQL, if you need direct database access.
 
-The portal should be available through the Codespaces forwarded URL for port `5173`; the API health endpoint should be available through the forwarded URL for port `8000`.
+The portal should be available through the Codespaces forwarded URL for port `5173`. In Docker Compose, the portal calls the API through Vite's dev proxy, so browser requests use the same forwarded `5173` origin and do not need a separate public API URL.
+
+Once the portal opens, you can exercise the current RMM control-plane workflows:
+
+- Select an asset and click **Broker remote** or **Broker jump** to create a remote-session request and timeline entry.
+- Open **Enroll endpoint** to generate a one-time endpoint token, bootstrap URL, and PowerShell command.
+- Open **Automation** to queue a script request for the selected asset.
+- Open **Integrations** to inspect which backing services still need real subsystem configuration.
 
 If PostgreSQL exits with a `/var/lib/postgresql/data` volume-layout error, reset the development volumes and start the stack again:
 
@@ -61,6 +68,13 @@ Build the portal directly:
 ```bash
 cd frontend
 npm run build
+```
+
+When running the portal outside Compose but still using Vite dev server, the API proxy defaults to `http://127.0.0.1:8000`. Override it if your backend is somewhere else:
+
+```bash
+cd frontend
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:8001 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
 ## Notes

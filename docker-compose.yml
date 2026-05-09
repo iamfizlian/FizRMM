@@ -66,7 +66,8 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     environment:
-      VITE_FIZRMM_API_BASE: ${FIZRMM_API_BASE:-http://127.0.0.1:8000}
+      VITE_FIZRMM_API_BASE: ${FIZRMM_API_BASE:-}
+      VITE_DEV_PROXY_TARGET: ${FIZRMM_DEV_PROXY_TARGET:-http://api:8000}
     ports:
       - "5173:5173"
     depends_on:
