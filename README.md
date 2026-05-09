@@ -31,7 +31,7 @@ Stop it:
 docker compose down
 ```
 
-For the full Docker setup guide, see [docs/INSTALL.md](docs/INSTALL.md).
+For the full Docker setup guide, see [docs/INSTALL.md](docs/INSTALL.md). To run in GitHub Codespaces, see [docs/CODESPACES.md](docs/CODESPACES.md).
 
 Endpoint deployment is partially implemented: the control plane can issue enrollment tokens and a Windows bootstrap script. See [docs/ENDPOINT_DEPLOYMENT.md](docs/ENDPOINT_DEPLOYMENT.md) for how PCs are enrolled and what still needs real subsystem integration.
 

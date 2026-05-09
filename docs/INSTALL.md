@@ -23,6 +23,8 @@ docker compose version
 
 ## 2. Start FizRMM
 
+If you are using GitHub Codespaces, first see [GitHub Codespaces](CODESPACES.md) for forwarded ports and dev container setup.
+
 From the repository root:
 
 ```bash
@@ -215,10 +217,21 @@ Then rebuild:
 docker compose build --no-cache
 ```
 
-### Reset everything
+### PostgreSQL 18 volume layout error
 
-This stops containers and removes Compose-created volumes, including the PostgreSQL data volume:
+If PostgreSQL exits with a message about data in `/var/lib/postgresql/data` or an unused mount/volume, remove the old development volume and start again:
 
 ```bash
-docker compose --profile infra down --volumes
+docker compose down --volumes
+docker compose up --build
+```
+
+The Compose file mounts PostgreSQL 18 volumes at `/var/lib/postgresql`, which lets the image create its major-version-specific data directory.
+
+### Reset everything
+
+This stops containers and removes Compose-created volumes, including the PostgreSQL data volumes:
+
+```bash
+docker compose --profile full down --volumes
 ```

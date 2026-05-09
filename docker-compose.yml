@@ -8,7 +8,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres18_data:/var/lib/postgresql
       - ./backend/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -66,7 +66,8 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     environment:
-      VITE_FIZRMM_API_BASE: ${FIZRMM_API_BASE:-http://127.0.0.1:8000}
+      VITE_FIZRMM_API_BASE: ${FIZRMM_API_BASE:-}
+      VITE_DEV_PROXY_TARGET: ${FIZRMM_DEV_PROXY_TARGET:-http://api:8000}
     ports:
       - "5173:5173"
     depends_on:
@@ -139,7 +140,7 @@ services:
       POSTGRES_USER: ${ZABBIX_POSTGRES_USER:-zabbix}
       POSTGRES_PASSWORD: ${ZABBIX_POSTGRES_PASSWORD:-zabbix-dev-password}
     volumes:
-      - zabbix_postgres_data:/var/lib/postgresql/data
+      - zabbix_postgres18_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -217,12 +218,12 @@ services:
       - opensearch
 
 volumes:
-  postgres_data:
+  postgres18_data:
   opensearch_data:
   runtime_config:
   meshcentral_data:
   meshcentral_files:
   salt_etc:
   salt_srv:
-  zabbix_postgres_data:
+  zabbix_postgres18_data:
   wazuh_manager_data:
