@@ -30,9 +30,10 @@ def main() -> None:
     config = read_json(CONFIG_PATH)
     services = selected_service_ports()
     wait_for_services(services)
+    mark_services_reachable(config, services)
     if "keycloak" in services:
         configure_keycloak(config)
-    runtime_config = mark_initialized(config)
+    runtime_config = mark_runtime_config_written(config)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(runtime_config, indent=2, sort_keys=True), encoding="utf-8")
     print(f"Wrote FizRMM runtime integration config to {OUTPUT_PATH}")
@@ -113,7 +114,26 @@ def can_connect(host: str, port: int) -> bool:
         return False
 
 
-def mark_initialized(config: dict[str, Any]) -> dict[str, Any]:
+def mark_services_reachable(config: dict[str, Any], services: dict[str, tuple[str, int]]) -> None:
+    service_to_integration = {
+        "keycloak": "identity",
+        "nats": "nats",
+        "meshcentral": "meshcentral",
+        "salt": "salt",
+        "zabbix": "zabbix",
+        "wazuh": "wazuh",
+        "opensearch": "opensearch",
+    }
+    for service_name in services:
+        integration = integration_config(config, service_to_integration.get(service_name, service_name))
+        if not integration:
+            continue
+        init_state = integration.setdefault("init", {})
+        if isinstance(init_state, dict):
+            init_state["service_reachable"] = True
+
+
+def mark_runtime_config_written(config: dict[str, Any]) -> dict[str, Any]:
     integrations = config.get("integrations", {})
     if not isinstance(integrations, dict):
         raise ValueError("init config integrations must be an object")
@@ -122,7 +142,6 @@ def mark_initialized(config: dict[str, Any]) -> dict[str, Any]:
             continue
         init_state = integration.setdefault("init", {})
         if isinstance(init_state, dict):
-            init_state.setdefault("status", "scaffolded")
             init_state["runtime_config_written"] = True
     config["generated_by"] = "fizrmm-init"
     config["generated_at_unix"] = int(time.time())
