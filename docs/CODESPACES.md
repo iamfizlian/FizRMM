@@ -1,6 +1,6 @@
 # GitHub Codespaces
 
-FizRMM can run in a GitHub Codespace for development and demos. The dev container installs Python and frontend dependencies, exposes the app ports, and enables Docker so the existing Compose stack can run inside the Codespace.
+FizRMM can run in a GitHub Codespace for development and demos. The dev container uses the GitHub Codespaces universal image, installs Python and frontend dependencies, and exposes the app ports so the existing Compose stack can run inside the Codespace.
 
 ## Start a Codespace
 
@@ -10,7 +10,7 @@ FizRMM can run in a GitHub Codespace for development and demos. The dev containe
 
 ## Run the default stack
 
-From the Codespaces terminal:
+The universal Codespaces image includes Docker tooling, so no extra Docker devcontainer feature is required. From the Codespaces terminal:
 
 ```bash
 docker compose up --build
@@ -58,6 +58,7 @@ npm run build
 
 ## Notes
 
+- The devcontainer intentionally avoids the `docker-outside-of-docker` feature because the universal Codespaces image already provides Docker tooling and the extra feature can fail during upstream apt repository key rotations.
 - The default Compose stack is the recommended Codespaces path for routine development.
 - The full profile is a lab scaffold and can be memory-intensive.
 - Codespaces forwarded URLs are public/private according to your Codespaces port visibility settings; keep development credentials out of production use.

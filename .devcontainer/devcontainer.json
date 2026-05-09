@@ -1,10 +1,21 @@
 {
   "name": "FizRMM",
   "image": "mcr.microsoft.com/devcontainers/universal:2-linux",
-  "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
   },
-  "forwardPorts": [5173, 8000, 5432, 8080, 8081, 8222, 8443, 9200],
+  "forwardPorts": [
+    5173,
+    8000,
+    5432,
+    8080,
+    8081,
+    8222,
+    8443,
+    9200
+  ],
   "portsAttributes": {
     "5173": {
       "label": "FizRMM Portal",
