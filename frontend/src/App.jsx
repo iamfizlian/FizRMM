@@ -45,6 +45,7 @@ function App() {
   const [orgId, setOrgId] = useState("org_acme");
   const [role, setRole] = useState("technician");
   const [activeView, setActiveView] = useState("assets");
+  const [orgs, setOrgs] = useState([]);
   const [assets, setAssets] = useState([]);
   const [selectedAssetId, setSelectedAssetId] = useState(null);
   const [assetDetail, setAssetDetail] = useState(null);
@@ -58,6 +59,8 @@ function App() {
   const [enrollmentSite, setEnrollmentSite] = useState("Default");
   const [enrollmentHours, setEnrollmentHours] = useState(24);
   const [enrollment, setEnrollment] = useState(null);
+  const [newOrgName, setNewOrgName] = useState("");
+  const [newOrgId, setNewOrgId] = useState("");
 
   const selectedAsset = useMemo(
     () => assets.find((asset) => asset.id === selectedAssetId) || assets[0],
@@ -67,6 +70,35 @@ function App() {
   const activeScripts = scripts.filter(
     (script) => !script.org_id || role === "platform-admin" || script.org_id === orgId,
   );
+
+  const alerts = useMemo(() => {
+    const assetAlerts = assets
+      .filter((asset) => asset.state !== "active")
+      .map((asset) => ({
+        id: `asset-${asset.id}`,
+        severity: asset.state === "offline" ? "critical" : "warning",
+        title: `${asset.hostname} is ${asset.state}`,
+        body: `${asset.operating_system} at ${asset.site} needs technician review.`,
+      }));
+    const integrationAlerts = integrations
+      .filter((integration) => !integration.configured || !integration.initialized)
+      .map((integration) => ({
+        id: `integration-${integration.id}`,
+        severity: integration.configured ? "info" : "warning",
+        title: `${integration.name} is ${integration.state}`,
+        body: integration.summary,
+      }));
+    return [...assetAlerts, ...integrationAlerts];
+  }, [assets, integrations]);
+
+  const logEvents = useMemo(() => timeline.map((event) => ({
+    id: event.id,
+    source: event.source,
+    title: event.title,
+    body: event.body,
+    kind: event.kind,
+    created_at: event.created_at,
+  })), [timeline]);
 
   useEffect(() => {
     refreshAssets();
@@ -84,11 +116,13 @@ function App() {
 
   async function refreshAssets() {
     try {
-      const [assetPayload, scriptPayload, integrationPayload] = await Promise.all([
+      const [orgPayload, assetPayload, scriptPayload, integrationPayload] = await Promise.all([
+        api("/api/orgs", orgId, role),
         api("/api/assets", orgId, role),
         api("/api/scripts", orgId, role),
         api("/api/integrations", orgId, role),
       ]);
+      setOrgs(orgPayload.organizations);
       setAssets(assetPayload.assets);
       setScripts(scriptPayload.scripts);
       setIntegrations(integrationPayload.integrations);
@@ -165,6 +199,24 @@ function App() {
     }
   }
 
+  async function createOrganization(event) {
+    event.preventDefault();
+    try {
+      const payload = await api("/api/orgs", orgId, role, {
+        method: "POST",
+        body: JSON.stringify({ name: newOrgName, id: newOrgId }),
+      });
+      setNewOrgName("");
+      setNewOrgId("");
+      setOrgId(payload.organization.id);
+      setLastAction({ type: "Organization created", payload });
+      setNotice(`Organization created: ${payload.organization.name}`);
+      refreshAssets();
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
   function selectAsset(assetId) {
     setSelectedAssetId(assetId);
     setActiveView("assets");
@@ -175,6 +227,9 @@ function App() {
     { id: "enroll", label: "Enroll endpoint", icon: <MonitorCog size={18} /> },
     { id: "automation", label: "Automation", icon: <TerminalSquare size={18} /> },
     { id: "integrations", label: "Integrations", icon: <PlugZap size={18} /> },
+    { id: "alerts", label: "Alerts", icon: <Bell size={18} /> },
+    { id: "logs", label: "Logs", icon: <Search size={18} /> },
+    { id: "access", label: "Access", icon: <ShieldCheck size={18} /> },
   ];
 
   return (
@@ -197,9 +252,6 @@ function App() {
               {view.icon} {view.label}
             </button>
           ))}
-          <button className="nav-item disabled" title="Coming in a later integration slice"><Bell size={18} /> Alerts</button>
-          <button className="nav-item disabled" title="Coming in a later integration slice"><Search size={18} /> Logs</button>
-          <button className="nav-item disabled" title="Coming in a later integration slice"><ShieldCheck size={18} /> Access</button>
         </nav>
       </aside>
 
@@ -211,8 +263,8 @@ function App() {
           </div>
           <div className="controls">
             <select value={orgId} onChange={(event) => setOrgId(event.target.value)}>
-              <option value="org_acme">Acme Medical</option>
-              <option value="org_globex">Globex Manufacturing</option>
+              {orgs.map((org) => <option value={org.id} key={org.id}>{org.name}</option>)}
+              {orgs.length === 0 && <option value={orgId}>{orgId}</option>}
             </select>
             <select value={role} onChange={(event) => setRole(event.target.value)}>
               <option value="technician">Technician</option>
@@ -228,6 +280,7 @@ function App() {
           <Stat icon={<Activity />} label="Visible assets" value={assets.length} />
           <Stat icon={<Radio />} label="Agents tracked" value={agents.length || "-"} />
           <Stat icon={<Command />} label="Scripts" value={activeScripts.length} />
+          <Stat icon={<Bell />} label="Open alerts" value={alerts.length} />
           <Stat icon={<PlugZap />} label="Endpoint readiness" value={integrationReady ? "Ready" : "Needs config"} />
           <Stat icon={<CheckCircle2 />} label="State" value={notice} />
         </section>
@@ -288,6 +341,24 @@ function App() {
             )}
             {activeView === "integrations" && (
               <IntegrationsView integrations={integrations} integrationReady={integrationReady} />
+            )}
+            {activeView === "alerts" && (
+              <AlertsView alerts={alerts} />
+            )}
+            {activeView === "logs" && (
+              <LogsView selectedAsset={selectedAsset} events={logEvents} />
+            )}
+            {activeView === "access" && (
+              <AccessView
+                orgs={orgs}
+                role={role}
+                orgName={newOrgName}
+                orgId={newOrgId}
+                onOrgNameChange={setNewOrgName}
+                onOrgIdChange={setNewOrgId}
+                onSubmit={createOrganization}
+                lastAction={lastAction}
+              />
             )}
           </section>
         </section>
@@ -386,8 +457,12 @@ function EnrollmentView({ orgId, site, hours, enrollment, onSiteChange, onHoursC
           <h3>Enrollment ready</h3>
           <ResultRow label="Token" value={enrollment.token} />
           <ResultRow label="Bootstrap URL" value={bootstrapUrl} />
-          <ResultRow label="PowerShell command" value={enrollment.command} mono />
-          <small>Run the command from an elevated PowerShell prompt on the endpoint. The current backend will claim/report the asset and skip installers until real installer URLs are configured.</small>
+          <div className="download-actions">
+            <a href={bootstrapUrl} download="fizrmm-bootstrap.ps1">Download bootstrap.ps1</a>
+          </div>
+          <ResultRow label="Download command" value={`Invoke-WebRequest -Uri "${bootstrapUrl}" -OutFile .\\fizrmm-bootstrap.ps1`} mono />
+          <ResultRow label="Run command" value={enrollment.command} mono />
+          <small>Download the generated bootstrap script first, then run the command from an elevated PowerShell prompt on the endpoint. The current backend will claim/report the asset and skip installers until real installer URLs are configured.</small>
         </div>
       )}
     </div>
@@ -440,6 +515,85 @@ function IntegrationsView({ integrations, integrationReady }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function AlertsView({ alerts }) {
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Alert queue</p>
+        <h2>{alerts.length ? `${alerts.length} active alerts` : "No active alerts"}</h2>
+        <p className="muted">Current alerts are derived from asset state and integration readiness until the Zabbix/Wazuh adapters are fully wired.</p>
+      </div>
+      <div className="alert-grid">
+        {alerts.map((alert) => (
+          <article className={`alert-card ${alert.severity}`} key={alert.id}>
+            <span>{alert.severity}</span>
+            <strong>{alert.title}</strong>
+            <p>{alert.body}</p>
+          </article>
+        ))}
+        {alerts.length === 0 && <div className="empty-state compact">All clear for the selected tenant.</div>}
+      </div>
+    </div>
+  );
+}
+
+function LogsView({ selectedAsset, events }) {
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Device logs</p>
+        <h2>{selectedAsset ? `Timeline log for ${selectedAsset.hostname}` : "No asset selected"}</h2>
+        <p className="muted">This view exposes the current control-plane timeline as searchable log plumbing until OpenSearch/Wazuh ingestion is connected.</p>
+      </div>
+      <div className="log-table">
+        {events.map((event) => (
+          <article key={event.id}>
+            <code>{event.kind}</code>
+            <strong>{event.title}</strong>
+            <span>{event.source} · {event.created_at}</span>
+            <p>{event.body}</p>
+          </article>
+        ))}
+        {events.length === 0 && <div className="empty-state compact">No timeline events for this asset.</div>}
+      </div>
+    </div>
+  );
+}
+
+function AccessView({ orgs, role, orgName, orgId, onOrgNameChange, onOrgIdChange, onSubmit, lastAction }) {
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Tenant access</p>
+        <h2>Organizations</h2>
+        <p className="muted">Switch to Platform admin to create new customer organizations. Technicians can only view organizations in their simulated claim.</p>
+      </div>
+      <div className="org-grid">
+        {orgs.map((org) => (
+          <article className="org-card" key={org.id}>
+            <strong>{org.name}</strong>
+            <code>{org.id}</code>
+            <span>{org.status}</span>
+          </article>
+        ))}
+      </div>
+      <form className="form-grid" onSubmit={onSubmit}>
+        <label>
+          Organization name
+          <input value={orgName} onChange={(event) => onOrgNameChange(event.target.value)} placeholder="New Customer" />
+        </label>
+        <label>
+          Optional organization ID
+          <input value={orgId} onChange={(event) => onOrgIdChange(event.target.value)} placeholder="org_new_customer" />
+        </label>
+        <button type="submit" disabled={role !== "platform-admin"}><ShieldCheck size={17} /> Add organization</button>
+      </form>
+      {role !== "platform-admin" && <p className="muted">Organization creation is disabled for technician role.</p>}
+      <ActionResult action={lastAction?.type === "Organization created" ? lastAction : null} />
     </div>
   );
 }

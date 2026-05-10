@@ -327,6 +327,15 @@ class FizRmmHandler(BaseHTTPRequestHandler):
         raise NotFound("route not found")
 
     def _route_post(self, context: TenantContext, parts: list[str]) -> Any:
+        if parts == ["api", "orgs"]:
+            payload = self._read_payload()
+            return {
+                "organization": STORE.create_organization(
+                    context=context,
+                    name=str(payload.get("name") or ""),
+                    org_id=str(payload.get("id") or "").strip() or None,
+                )
+            }
         if parts == ["api", "enrollments"]:
             payload = self._read_payload()
             expires_hours = int(payload.get("expires_hours", 24))

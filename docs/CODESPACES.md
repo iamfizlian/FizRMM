@@ -27,8 +27,10 @@ The portal should be available through the Codespaces forwarded URL for port `51
 Once the portal opens, you can exercise the current RMM control-plane workflows:
 
 - Select an asset and click **Broker remote** or **Broker jump** to create a remote-session request and timeline entry.
-- Open **Enroll endpoint** to generate a one-time endpoint token, bootstrap URL, and PowerShell command.
+- Open **Enroll endpoint** to generate a one-time endpoint token, download `fizrmm-bootstrap.ps1`, and copy the PowerShell download/run commands.
 - Open **Automation** to queue a script request for the selected asset.
+- Open **Alerts** and **Logs** to inspect current control-plane alerts and timeline-derived log events.
+- Open **Access**, switch to **Platform admin**, and create a new customer organization.
 - Open **Integrations** to inspect which backing services still need real subsystem configuration.
 
 If PostgreSQL exits with a `/var/lib/postgresql/data` volume-layout error, reset the development volumes and start the stack again:

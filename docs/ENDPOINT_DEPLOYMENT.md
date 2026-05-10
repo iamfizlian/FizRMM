@@ -57,6 +57,8 @@ The response includes:
 - `bootstrap_url`
 - `command`
 
+The portal **Enroll endpoint** view also exposes these values and includes a direct `fizrmm-bootstrap.ps1` download link.
+
 Download the bootstrap script:
 
 ```bash
