@@ -12,13 +12,17 @@ You need Docker Compose. From the repo root:
 docker compose up --build
 ```
 
-To start the integrated lab stack scaffold, use:
+To start the integrated lab stack scaffold, use the serialized-pull command below. The `COMPOSE_PARALLEL_LIMIT=1` prefix works around a Docker Compose crash that can happen when the full profile pulls many images concurrently in Codespaces.
 
 ```bash
-docker compose --profile full up --build
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
 ```
 
+You can also run `make full`.
+
 The `full` profile adds Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, OpenSearch, and a `fizrmm-init` job that writes runtime integration config for the API.
+
+The Wazuh manager image is pinned to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that repository. Override `WAZUH_MANAGER_VERSION` when testing another published Wazuh tag.
 
 Open:
 
@@ -31,7 +35,7 @@ Stop it:
 docker compose down
 ```
 
-For the full Docker setup guide, see [docs/INSTALL.md](docs/INSTALL.md).
+For the full Docker setup guide, see [docs/INSTALL.md](docs/INSTALL.md). To run in GitHub Codespaces, see [docs/CODESPACES.md](docs/CODESPACES.md).
 
 Endpoint deployment is partially implemented: the control plane can issue enrollment tokens and a Windows bootstrap script. See [docs/ENDPOINT_DEPLOYMENT.md](docs/ENDPOINT_DEPLOYMENT.md) for how PCs are enrolled and what still needs real subsystem integration.
 
@@ -49,10 +53,23 @@ curl -i -H 'X-FizRMM-Orgs: org_acme' http://127.0.0.1:8000/api/assets/asset-glob
 
 The last command should return `403 Forbidden`; that is the tenant boundary test.
 
-## Tests Without Docker
+## Tests
+
+Backend tests run directly with Python:
 
 ```bash
 PYTHONPATH=backend/src python3 -m unittest discover backend/tests
+```
+
+Build the frontend through Docker if your host does not have Node.js/npm installed. The same target works from the repository root or from `frontend/`:
+
+```bash
+make frontend-build
+```
+
+If you do have npm installed locally, you can also build from `frontend/`:
+
+```bash
 cd frontend
 npm run build
 ```
