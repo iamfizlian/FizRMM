@@ -12,11 +12,13 @@ You need Docker Compose. From the repo root:
 docker compose up --build
 ```
 
-To start the integrated lab stack scaffold, use:
+To start the integrated lab stack scaffold, use the serialized-pull command below. The `COMPOSE_PARALLEL_LIMIT=1` prefix works around a Docker Compose crash that can happen when the full profile pulls many images concurrently in Codespaces.
 
 ```bash
-docker compose --profile full up --build
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
 ```
+
+You can also run `make full`.
 
 The `full` profile adds Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, OpenSearch, and a `fizrmm-init` job that writes runtime integration config for the API.
 

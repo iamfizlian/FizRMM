@@ -149,8 +149,10 @@ docker compose rm -f keycloak nats opensearch
 The integrated lab stack starts FizRMM plus the backing capability engines together:
 
 ```bash
-docker compose --profile full up --build
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
 ```
+
+You can also run `make full`. The `COMPOSE_PARALLEL_LIMIT=1` prefix avoids a Docker Compose concurrent-pull crash seen in some Codespaces/Compose versions when the full profile pulls many images at once.
 
 The `full` profile adds:
 
@@ -215,6 +217,20 @@ Then rebuild:
 
 ```bash
 docker compose build --no-cache
+```
+
+### Docker Compose concurrent pull crash
+
+If `docker compose --profile full up --build` crashes with `fatal error: concurrent map writes` while pulling images, rerun the full stack with serialized Compose operations:
+
+```bash
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
+```
+
+Or use the Makefile shortcut:
+
+```bash
+make full
 ```
 
 ### PostgreSQL 18 volume layout error

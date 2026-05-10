@@ -43,8 +43,16 @@ docker compose up --build
 The full profile is heavier and may need a larger Codespaces machine size because it starts Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, and OpenSearch in addition to the app:
 
 ```bash
-docker compose --profile full up --build
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
 ```
+
+You can also run:
+
+```bash
+make full
+```
+
+The `COMPOSE_PARALLEL_LIMIT=1` prefix is intentional. Some Codespaces Docker Compose builds can crash with `fatal error: concurrent map writes` while pulling many full-profile images at once. Serializing Compose image operations avoids that Docker Compose bug.
 
 Forwarded ports include:
 
