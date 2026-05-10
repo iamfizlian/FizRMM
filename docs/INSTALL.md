@@ -23,6 +23,8 @@ docker compose version
 
 ## 2. Start FizRMM
 
+If you are using GitHub Codespaces, first see [GitHub Codespaces](CODESPACES.md) for forwarded ports and dev container setup.
+
 From the repository root:
 
 ```bash
@@ -147,8 +149,20 @@ docker compose rm -f keycloak nats opensearch
 The integrated lab stack starts FizRMM plus the backing capability engines together:
 
 ```bash
-docker compose --profile full up --build
+make full
 ```
+
+The Makefile builds the local `api` and `portal` images one at a time before starting the full profile with `--no-build`. That ordering avoids the extra temporary disk pressure caused by exporting both local images while the large full-profile images are being pulled or unpacked.
+
+If you prefer raw Compose commands, use the same sequence:
+
+```bash
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build api
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
+```
+
+The `COMPOSE_PARALLEL_LIMIT=1` prefix avoids a Docker Compose concurrent-pull crash seen in some Codespaces/Compose versions when the full profile pulls many images at once.
 
 The `full` profile adds:
 
@@ -158,6 +172,7 @@ The `full` profile adds:
 - Salt master for endpoint execution.
 - Zabbix server/web with its own PostgreSQL database.
 - Wazuh manager for endpoint inventory/log/security events.
+  - The manager image is pinned to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that repository. Override `WAZUH_MANAGER_VERSION` for another published Wazuh tag.
 - OpenSearch for search and retention.
 - `fizrmm-init`, which waits for the backing services and writes `/runtime/fizrmm/integrations.json`.
 
@@ -215,10 +230,54 @@ Then rebuild:
 docker compose build --no-cache
 ```
 
-### Reset everything
+### Docker Compose concurrent pull crash
 
-This stops containers and removes Compose-created volumes, including the PostgreSQL data volume:
+If `docker compose --profile full up --build` crashes with `fatal error: concurrent map writes` while pulling images, use the Makefile shortcut. It serializes local image builds and starts Compose with serialized pull operations:
 
 ```bash
-docker compose --profile infra down --volumes
+make full
+```
+
+The equivalent raw Compose sequence is:
+
+```bash
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build api
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
+```
+
+### Docker reports `no space left on device` during `make full`
+
+The full lab profile pulls several large upstream images. If Docker's storage directory is already close to full, BuildKit may fail while exporting the local `api` or `portal` image. First remove unused Docker build cache and dangling images:
+
+```bash
+make docker-prune
+```
+
+If you still need space, inspect Docker usage before deleting volumes that may contain development data:
+
+```bash
+docker system df
+docker volume ls
+```
+
+Only after saving any data you need, remove stopped containers and unused images/volumes with Docker's broader prune commands.
+
+### PostgreSQL 18 volume layout error
+
+If PostgreSQL exits with a message about data in `/var/lib/postgresql/data` or an unused mount/volume, remove the old development volume and start again:
+
+```bash
+docker compose down --volumes
+docker compose up --build
+```
+
+The Compose file mounts PostgreSQL 18 volumes at `/var/lib/postgresql`, which lets the image create its major-version-specific data directory.
+
+### Reset everything
+
+This stops containers and removes Compose-created volumes, including the PostgreSQL data volumes:
+
+```bash
+docker compose --profile full down --volumes
 ```
