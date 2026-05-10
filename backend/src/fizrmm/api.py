@@ -89,7 +89,7 @@ def integration_status() -> dict[str, object]:
     runtime_config = load_runtime_config()
     identity_missing = [
         name
-        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET")
+        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID")
         if not (os.getenv(name, "").strip() or _runtime_identity_value(name))
     ]
     integrations = [
@@ -235,7 +235,8 @@ def _is_initialized(runtime: dict[str, object]) -> bool:
     init = runtime.get("init")
     if not isinstance(init, dict):
         return False
-    return bool(init.get("runtime_config_written"))
+    status = str(init.get("status") or "").strip().lower()
+    return status in {"configured", "initialized", "ready"}
 
 
 def _integration_state(configured: bool, initialized: bool, fallback: str = "missing_config") -> str:
@@ -326,6 +327,15 @@ class FizRmmHandler(BaseHTTPRequestHandler):
         raise NotFound("route not found")
 
     def _route_post(self, context: TenantContext, parts: list[str]) -> Any:
+        if parts == ["api", "orgs"]:
+            payload = self._read_payload()
+            return {
+                "organization": STORE.create_organization(
+                    context=context,
+                    name=str(payload.get("name") or ""),
+                    org_id=str(payload.get("id") or "").strip() or None,
+                )
+            }
         if parts == ["api", "enrollments"]:
             payload = self._read_payload()
             expires_hours = int(payload.get("expires_hours", 24))
