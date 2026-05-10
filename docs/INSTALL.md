@@ -1,18 +1,19 @@
 # FizRMM Installation Guide
 
-FizRMM runs locally with Docker Compose. The default stack starts the current app plus persistent Postgres:
+FizRMM's supported Docker install starts the full lab stack. There is not a separate "working" lightweight install: the portal alone cannot provide remote access, monitoring, logs, or execution without the backing services.
 
-- `postgres`: development PostgreSQL database seeded from `backend/migrations`
-- `api`: FizRMM backend prototype at `http://127.0.0.1:8000`
-- `portal`: React technician portal at `http://127.0.0.1:5173`
+The full stack includes:
 
-Keycloak, NATS, and OpenSearch are available as optional infrastructure services for later integration work.
+- `portal`: FizRMM technician portal at `http://127.0.0.1:5173`
+- `api`: FizRMM backend at `http://127.0.0.1:8000`
+- `postgres`: FizRMM control-plane database
+- Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, OpenSearch, and `fizrmm-init`
 
-This install can issue endpoint enrollment tokens and a Windows bootstrap script. Real remote/monitoring requires configuring MeshCentral, Zabbix, Wazuh, and Salt agent installer settings. See [Endpoint Deployment](ENDPOINT_DEPLOYMENT.md).
+Endpoint enrollment can generate both Windows PowerShell and Linux shell bootstrap downloads. Real remote/monitoring still depends on finishing the subsystem adapters and configuring agent installer URLs. See [Endpoint Deployment](ENDPOINT_DEPLOYMENT.md).
 
 ## 1. Prerequisites
 
-Install Docker Desktop or Docker Engine with the Compose plugin.
+Install Docker Engine with the Compose plugin. On small cloud VMs, give Docker enough disk for the full lab images.
 
 Check that Docker is available:
 
@@ -28,37 +29,49 @@ If you are using GitHub Codespaces, first see [GitHub Codespaces](CODESPACES.md)
 From the repository root:
 
 ```bash
-docker compose up --build
+make full
 ```
 
-When startup is complete, open:
+The Makefile builds the local `api` and `portal` images one at a time before starting the full stack. This avoids Docker Compose concurrent-pull crashes and reduces temporary image-export disk pressure.
 
-- Portal: `http://127.0.0.1:5173/`
+Equivalent raw Compose sequence:
+
+```bash
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build api
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
+```
+
+## 3. Open The UIs
+
+Local URLs:
+
+- FizRMM portal: `http://127.0.0.1:5173/`
+- MeshCentral remote access UI: `https://127.0.0.1:8443/`
+- Zabbix UI: `http://127.0.0.1:8081/`
+- Keycloak UI: `http://127.0.0.1:8080/`
 - API health: `http://127.0.0.1:8000/health`
 
-Expected log lines include:
+On Oracle Cloud or another VM, either use SSH tunnels or open the matching cloud ingress and Linux firewall ports. SSH tunnel example from your workstation:
 
-```text
-FizRMM API listening on http://0.0.0.0:8000
-Local:   http://localhost:5173/
+```bash
+ssh \
+  -L 5173:127.0.0.1:5173 \
+  -L 8443:127.0.0.1:8443 \
+  -L 8081:127.0.0.1:8081 \
+  -L 8080:127.0.0.1:8080 \
+  opc@<ORACLE_PUBLIC_IP>
 ```
 
-## 3. Verify The Install
+Then open the `127.0.0.1` URLs above on your workstation.
+
+## 4. Verify The Install
 
 In another terminal:
 
 ```bash
 curl http://127.0.0.1:8000/health
-```
-
-Expected response:
-
-```json
-{
-  "status": "ok",
-  "service": "fizrmm-api",
-  "store": "postgres"
-}
+docker compose ps
 ```
 
 List assets visible to an Acme technician:
@@ -79,31 +92,12 @@ Expected status:
 HTTP/1.0 403 Forbidden
 ```
 
-Broker a fake MeshCentral session:
+## 5. Stop Or Update
 
-```bash
-curl -X POST \
-  -H 'Content-Type: application/json' \
-  -H 'X-FizRMM-Orgs: org_acme' \
-  -d '{"engine":"meshcentral"}' \
-  http://127.0.0.1:8000/api/assets/asset-acme-win-01/remote-sessions
-```
-
-Expected response includes `session_id`, `engine`, and `launch_url`.
-
-## 4. Stop Or Update
-
-Stop the app:
+Stop the stack:
 
 ```bash
 docker compose down
-```
-
-Rebuild after dependency or Dockerfile changes:
-
-```bash
-docker compose build --no-cache
-docker compose up
 ```
 
 View service logs:
@@ -111,82 +105,13 @@ View service logs:
 ```bash
 docker compose logs -f api
 docker compose logs -f portal
+docker compose logs -f meshcentral
+docker compose logs -f zabbix-web
 ```
 
-## 5. Optional Infrastructure
+## 6. Development-only Minimal Mode
 
-The current UI already uses PostgreSQL through the API. Keycloak, NATS, and OpenSearch are behind the `infra` profile so the normal install stays lighter.
-
-Create a local environment file:
-
-```bash
-cp .env.example .env
-```
-
-Start the infrastructure services:
-
-```bash
-docker compose --profile infra up -d keycloak nats opensearch
-```
-
-Service URLs:
-
-- PostgreSQL: `localhost:5432`
-- Keycloak: `http://127.0.0.1:8080`
-- NATS: `localhost:4222`
-- NATS monitoring: `http://127.0.0.1:8222`
-- OpenSearch: `https://127.0.0.1:9200`
-
-Stop the optional infrastructure services:
-
-```bash
-docker compose stop keycloak nats opensearch
-docker compose rm -f keycloak nats opensearch
-```
-
-## 6. Integrated Lab Stack
-
-The integrated lab stack starts FizRMM plus the backing capability engines together:
-
-```bash
-make full
-```
-
-The Makefile builds the local `api` and `portal` images one at a time before starting the full profile with `--no-build`. The portal image intentionally does not bake `node_modules`; Compose mounts the frontend source and a `frontend_node_modules` volume, then installs dependencies in that volume on first container start. That ordering and image layout avoid the extra temporary disk pressure caused by exporting both local images and the frontend dependency tree while the large full-profile images are being pulled or unpacked.
-
-If you prefer raw Compose commands, use the same sequence:
-
-```bash
-COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build api
-COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
-COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
-```
-
-The `COMPOSE_PARALLEL_LIMIT=1` prefix avoids a Docker Compose concurrent-pull crash seen in some Codespaces/Compose versions when the full profile pulls many images at once.
-
-The `full` profile adds:
-
-- Keycloak for identity.
-- NATS JetStream for workflow/event streams.
-- MeshCentral for remote access.
-- Salt master for endpoint execution.
-- Zabbix server/web with its own PostgreSQL database.
-- Wazuh manager for endpoint inventory/log/security events.
-  - The manager image is pinned to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that repository. Override `WAZUH_MANAGER_VERSION` for another published Wazuh tag.
-- OpenSearch for search and retention.
-- `fizrmm-init`, which waits for the backing services and writes `/runtime/fizrmm/integrations.json`.
-
-This is currently a deployment scaffold. The init job writes the runtime contract consumed by `/api/integrations`; the next implementation step is making that init job call each subsystem API to create realms, tokens, groups, templates, ACLs, and index policies.
-
-The Keycloak slice now creates:
-
-- Realm: `fizrmm`
-- Public OIDC client: `fizrmm-portal`
-- Realm roles: `platform-admin`, `technician`
-- Demo admin: `demo-admin` / `demo-admin-password`
-- Demo technician: `demo-tech` / `demo-tech-password`
-
-The API accepts Keycloak Bearer tokens when present and falls back to `X-FizRMM-*` headers for local development paths that have not moved to browser login yet.
+The full stack is the install path. Raw `docker compose up --build` also starts the same stack now. If you manually target only `postgres`, `api`, and `portal`, that is a developer-only control-plane mode and will not provide remote access, monitoring, Wazuh logs, or Salt execution.
 
 ## 7. Troubleshooting
 
@@ -213,11 +138,11 @@ Confirm the API is reachable from your host:
 curl http://127.0.0.1:8000/health
 ```
 
-The portal uses `FIZRMM_API_BASE` from `.env` or defaults to `http://127.0.0.1:8000`.
+The Compose portal proxies `/api` to the API container. If direct API health works but the browser does not, check the portal container logs with `docker compose logs -f portal`.
 
 ### Docker build cannot download packages
 
-Confirm your host has internet access to npm and PyPI:
+Confirm Docker builds have internet access to npm and PyPI. If your host has npm/Python tooling, these checks are useful:
 
 ```bash
 npm ping
@@ -227,12 +152,12 @@ python3 -m pip index versions fastapi
 Then rebuild:
 
 ```bash
-docker compose build --no-cache
+COMPOSE_PARALLEL_LIMIT=1 docker compose build --no-cache api portal
 ```
 
 ### Docker Compose concurrent pull crash
 
-If `docker compose --profile full up --build` crashes with `fatal error: concurrent map writes` while pulling images, use the Makefile shortcut. It serializes local image builds and starts Compose with serialized pull operations:
+If raw Compose crashes with `fatal error: concurrent map writes` while pulling images, use the Makefile shortcut. It serializes local image builds and starts Compose with serialized pull operations:
 
 ```bash
 make full
@@ -248,7 +173,7 @@ COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
 
 ### Docker reports `no space left on device` during `make full`
 
-The full lab profile pulls several large upstream images. If Docker's storage directory is already close to full, BuildKit may still fail while exporting images or installing frontend dependencies into the `frontend_node_modules` volume. First remove unused Docker build cache and dangling images:
+The lab stack pulls several large upstream images. If Docker's storage directory is already close to full, BuildKit may still fail while exporting images or installing frontend dependencies into the `frontend_node_modules` volume. First remove unused Docker build cache and dangling images:
 
 ```bash
 make docker-prune
@@ -277,7 +202,7 @@ If PostgreSQL exits with a message about data in `/var/lib/postgresql/data` or a
 
 ```bash
 docker compose down --volumes
-docker compose up --build
+make full
 ```
 
 The Compose file mounts PostgreSQL 18 volumes at `/var/lib/postgresql`, which lets the image create its major-version-specific data directory.
@@ -287,5 +212,5 @@ The Compose file mounts PostgreSQL 18 volumes at `/var/lib/postgresql`, which le
 This stops containers and removes Compose-created volumes, including the PostgreSQL data volumes:
 
 ```bash
-docker compose --profile full down --volumes
+docker compose down --volumes
 ```

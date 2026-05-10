@@ -429,12 +429,13 @@ function AssetView({ selectedAsset, assetDetail, agents, timeline, lastAction, s
 
 function EnrollmentView({ orgId, site, hours, enrollment, onSiteChange, onHoursChange, onSubmit }) {
   const bootstrapUrl = enrollment?.bootstrap_url ? `${API_BASE}${enrollment.bootstrap_url}` : "";
+  const linuxBootstrapUrl = enrollment?.linux_bootstrap_url ? `${API_BASE}${enrollment.linux_bootstrap_url}` : "";
   return (
     <div className="workflow-panel">
       <div>
         <p className="eyebrow">Endpoint deployment</p>
         <h2>Create a one-time enrollment</h2>
-        <p className="muted">Generate a token and bootstrap command for a Windows endpoint in the selected tenant.</p>
+        <p className="muted">Generate a token and bootstrap commands for Windows or Linux endpoints in the selected tenant.</p>
       </div>
       <form className="form-grid" onSubmit={onSubmit}>
         <label>
@@ -456,13 +457,16 @@ function EnrollmentView({ orgId, site, hours, enrollment, onSiteChange, onHoursC
         <div className="result-card">
           <h3>Enrollment ready</h3>
           <ResultRow label="Token" value={enrollment.token} />
-          <ResultRow label="Bootstrap URL" value={bootstrapUrl} />
+          <ResultRow label="Windows bootstrap URL" value={bootstrapUrl} />
+          <ResultRow label="Linux bootstrap URL" value={linuxBootstrapUrl} />
           <div className="download-actions">
-            <a href={bootstrapUrl} download="fizrmm-bootstrap.ps1">Download bootstrap.ps1</a>
+            <a href={bootstrapUrl} download="fizrmm-bootstrap.ps1">Download Windows bootstrap.ps1</a>
+            <a href={linuxBootstrapUrl} download="fizrmm-bootstrap.sh">Download Linux bootstrap.sh</a>
           </div>
-          <ResultRow label="Download command" value={`Invoke-WebRequest -Uri "${bootstrapUrl}" -OutFile .\\fizrmm-bootstrap.ps1`} mono />
-          <ResultRow label="Run command" value={enrollment.command} mono />
-          <small>Download the generated bootstrap script first, then run the command from an elevated PowerShell prompt on the endpoint. The current backend will claim/report the asset and skip installers until real installer URLs are configured.</small>
+          <ResultRow label="Windows download command" value={`Invoke-WebRequest -Uri "${bootstrapUrl}" -OutFile .\\fizrmm-bootstrap.ps1`} mono />
+          <ResultRow label="Windows run command" value={enrollment.command} mono />
+          <ResultRow label="Linux run command" value={enrollment.linux_command} mono />
+          <small>Download the generated bootstrap script first, then run it as Administrator on Windows or with sudo/root on Linux. The current backend will claim/report the asset and skip agent installers until installer URLs are configured.</small>
         </div>
       )}
     </div>

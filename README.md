@@ -6,28 +6,27 @@ This is an early development slice, not a production RMM yet. It gives you a wor
 
 ## Quick Start With Docker
 
+There is now one supported Docker startup path for an RMM lab install: start the full stack. The smaller API/portal-only Compose mode is no longer documented as an install because it cannot provide remote access, monitoring, logs, or script execution services by itself.
+
 You need Docker Compose. From the repo root:
 
 ```bash
-docker compose up --build
+make full
 ```
 
-To start the integrated lab stack scaffold, use the serialized-pull command below. The `COMPOSE_PARALLEL_LIMIT=1` prefix works around a Docker Compose crash that can happen when the full profile pulls many images concurrently in Codespaces.
+That builds the local API and portal images serially, then starts PostgreSQL, the FizRMM portal/API, Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, OpenSearch, and the `fizrmm-init` job. The serialized Makefile path avoids Docker Compose concurrent-pull crashes and reduces temporary disk pressure on small hosts.
 
-```bash
-COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
-```
+Open the UIs you need:
 
-You can also run `make full`.
+- FizRMM portal: `http://127.0.0.1:5173/`
+- MeshCentral: `https://127.0.0.1:8443/`
+- Zabbix: `http://127.0.0.1:8081/`
+- Keycloak: `http://127.0.0.1:8080/`
+- API health: `http://127.0.0.1:8000/health`
 
-The `full` profile adds Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, OpenSearch, and a `fizrmm-init` job that writes runtime integration config for the API.
+On a cloud VM, replace `127.0.0.1` with the public IP only after opening the required cloud security-list/firewall ports, or use SSH tunnels for those ports.
 
 The Wazuh manager image is pinned to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that repository. Override `WAZUH_MANAGER_VERSION` when testing another published Wazuh tag.
-
-Open:
-
-- Portal: `http://127.0.0.1:5173/`
-- API health: `http://127.0.0.1:8000/health`
 
 Stop it:
 
@@ -37,7 +36,7 @@ docker compose down
 
 For the full Docker setup guide, see [docs/INSTALL.md](docs/INSTALL.md). To run in GitHub Codespaces, see [docs/CODESPACES.md](docs/CODESPACES.md).
 
-Endpoint deployment is partially implemented: the control plane can issue enrollment tokens and a Windows bootstrap script. See [docs/ENDPOINT_DEPLOYMENT.md](docs/ENDPOINT_DEPLOYMENT.md) for how PCs are enrolled and what still needs real subsystem integration.
+Endpoint deployment is partially implemented: the control plane can issue enrollment tokens and downloadable Windows and Linux bootstrap scripts. See [docs/ENDPOINT_DEPLOYMENT.md](docs/ENDPOINT_DEPLOYMENT.md) for endpoint enrollment details and the remaining subsystem-adapter work.
 
 The staged path to a complete integrated RMM is tracked in [docs/INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md).
 
@@ -88,31 +87,24 @@ npm run build
 
 ## Current Slice
 
-- Dockerized backend and portal for one-command local startup.
+- Dockerized full lab stack for one-command startup with portal, API, PostgreSQL, Keycloak, MeshCentral, Salt, Zabbix, Wazuh, NATS, and OpenSearch.
 - PostgreSQL-backed Docker install with seeded organizations, assets, agents, scripts, and timeline events.
 - Dependency-light backend prototype with tenant-aware route contracts.
 - Canonical domain model for orgs, assets, connector IDs, agent health, scripts, audit, and timeline events.
 - PostgreSQL schema draft with row-level security policies.
 - React portal shell scaffold for the technician experience.
 - Integration readiness API and portal visibility for Keycloak, MeshCentral, Salt, Zabbix, and Wazuh configuration.
-- Optional Docker Compose profile for Keycloak, NATS, and OpenSearch.
+- Runtime integration readiness visibility for the backing services started by the Docker lab stack.
 
 ## Not Yet Implemented
 
 - MeshCentral, Zabbix, Wazuh, or Salt server integration.
 - Real remote control, monitoring, log collection, or script execution.
-- Signed/package-managed Windows/macOS/Linux installers.
+- Signed/package-managed Windows/macOS installers; Linux has a generated bootstrap shell script, but signed distro packages are still future work.
 
-## Optional Infrastructure
+## Development-only minimal mode
 
-The current app starts Postgres by default. When you are ready to start the heavier future integration services:
-
-```bash
-cp .env.example .env
-docker compose --profile infra up -d keycloak nats opensearch
-```
-
-The compose stack is the next integration target and is intentionally a development baseline, not production hardening.
+The full stack above is the supported lab install. If you are only editing the API or portal and intentionally do not need the backing RMM service UIs, you can still start individual services with raw Docker Compose commands, but that mode is for development only and will not provide real remote-access/monitoring/logging capability.
 
 ## Tenant Simulation
 

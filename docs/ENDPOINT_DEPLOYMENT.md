@@ -1,8 +1,8 @@
 # Endpoint Deployment
 
-The Docker install starts the FizRMM control plane: portal, API, and PostgreSQL. The control plane can now issue endpoint enrollment tokens and a Windows bootstrap script.
+The Docker install starts the FizRMM lab stack: portal, API, PostgreSQL, and the backing service containers. The control plane can now issue endpoint enrollment tokens and downloadable Windows PowerShell and Linux shell bootstrap scripts.
 
-Real remote access and monitoring still require backing subsystem servers and installer URLs for MeshCentral, Zabbix, Wazuh, and Salt. Without those URLs configured, the bootstrapper can claim/report the endpoint but will skip agent installation.
+Real remote access and monitoring still require the FizRMM adapters to finish configuring MeshCentral, Zabbix, Wazuh, and Salt plus OS-specific agent installer URLs. Without those URLs configured, the bootstrappers can claim/report the endpoint but will skip agent installation.
 
 To manage a real PC, FizRMM needs an endpoint enrollment flow that installs and registers the agent bundle for that organization/site/device. The planned default endpoint footprint is:
 
@@ -92,6 +92,38 @@ Preferred mass deployment methods:
 - RMM-to-RMM migration script from an existing tool.
 - Manual elevated PowerShell for a small pilot.
 
+
+## Linux Endpoint Flow
+
+For a Linux endpoint, create the same enrollment token with `POST /api/enrollments`. The response now includes:
+
+- `linux_bootstrap_url`
+- `linux_command`
+
+Download and run the Linux bootstrap script as root:
+
+```bash
+curl -fsSL http://127.0.0.1:8000/api/enrollments/<token>/bootstrap.sh -o fizrmm-bootstrap.sh
+sudo bash ./fizrmm-bootstrap.sh
+```
+
+Or run the one-line `linux_command` returned by the API/portal. The Linux bootstrapper:
+
+1. Verifies it is running as root.
+2. Claims the enrollment token with hostname and Linux OS information.
+3. Downloads configured Linux installer URLs when present.
+4. Falls back to `skipped_no_installer_url` reports when an installer is not configured.
+5. Reports MeshCentral/Zabbix/Wazuh/Salt connector status back to FizRMM.
+
+Linux-specific installer overrides can be passed to the API container with these environment variables:
+
+- `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` / `MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS`
+- `ZABBIX_LINUX_AGENT_INSTALLER_URL` / `ZABBIX_LINUX_AGENT_INSTALL_ARGS`
+- `WAZUH_LINUX_AGENT_INSTALLER_URL` / `WAZUH_LINUX_AGENT_INSTALL_ARGS`
+- `SALT_LINUX_MINION_INSTALLER_URL` / `SALT_LINUX_MINION_INSTALL_ARGS`
+
+The generic `*_INSTALLER_URL` values are used as fallback if Linux-specific values are empty.
+
 ## Network Requirements
 
 The preferred model is outbound-only from the endpoint, which works better for NAT and customer firewalls.
@@ -116,6 +148,7 @@ Implemented now:
 - `POST /api/enrollments/{token}/claim`: return endpoint bootstrap configuration.
 - `POST /api/enrollments/{token}/report`: write installed connector IDs and agent health.
 - `GET /api/enrollments/{token}/bootstrap.ps1`: download a Windows bootstrap script.
+- `GET /api/enrollments/{token}/bootstrap.sh`: download a Linux bootstrap script.
 
 Still required before real PC remote/monitoring works:
 
@@ -168,6 +201,7 @@ Implemented now:
 - Tenant-aware API behavior and portal views.
 - Endpoint enrollment tokens.
 - Windows bootstrap script generation.
+- Linux bootstrap script generation.
 - Endpoint claim/report APIs.
 - Fake remote-session and script-run requests that write timeline events.
 
@@ -177,5 +211,5 @@ Not implemented yet:
 - Zabbix server/proxy integration.
 - Wazuh manager/indexer integration.
 - Salt master integration.
-- Windows/macOS/Linux bootstrapper installers.
+- Signed Windows/macOS/Linux package installers; generated Windows and Linux bootstrap scripts exist now.
 - Real remote control, monitoring, log collection, or script execution.
