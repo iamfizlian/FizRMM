@@ -45,7 +45,7 @@ Use the Docker-backed build if your host does not have npm installed. This works
 make frontend-build
 ```
 
-The frontend Makefile also delegates full-stack helpers to the repository root, so `make full`, `make full-build`, and `make full-pull` work from this directory.
+The frontend Makefile also delegates backend and full-stack helpers to the repository root, so `make test-backend`, `make full`, `make full-build`, and `make full-pull` work from this directory.
 
 Or build directly when npm is available locally:
 

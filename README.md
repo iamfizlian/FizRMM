@@ -55,7 +55,13 @@ The last command should return `403 Forbidden`; that is the tenant boundary test
 
 ## Tests
 
-Backend tests run directly with Python:
+Backend tests can be run through Make from the repository root or from `frontend/`:
+
+```bash
+make test-backend
+```
+
+From the repository root, you can also run the Python command directly:
 
 ```bash
 PYTHONPATH=backend/src python3 -m unittest discover backend/tests
@@ -67,10 +73,16 @@ Build the frontend through Docker if your host does not have Node.js/npm install
 make frontend-build
 ```
 
-If you do have npm installed locally, you can also build from `frontend/`:
+If you do have npm installed locally, you can also build directly. From the repository root:
 
 ```bash
 cd frontend
+npm run build
+```
+
+If your shell is already in `frontend/`, run only:
+
+```bash
 npm run build
 ```
 

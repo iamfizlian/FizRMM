@@ -72,7 +72,13 @@ Forwarded ports include:
 
 ## Run tests without Docker
 
-Activate the dev container virtual environment before running backend tests directly:
+Backend tests can be run through Make from either the repository root or `frontend/`:
+
+```bash
+make test-backend
+```
+
+If you want to invoke Python directly from the repository root, activate the dev container virtual environment first:
 
 ```bash
 source .venv/bin/activate
@@ -85,10 +91,16 @@ Build the portal through Docker when you want the same path used by hosts that d
 make frontend-build
 ```
 
-Because the devcontainer installs frontend dependencies, you can also build directly inside Codespaces:
+Because the devcontainer installs frontend dependencies, you can also build directly inside Codespaces. From the repository root:
 
 ```bash
 cd frontend
+npm run build
+```
+
+If your shell is already in `frontend/`, run only:
+
+```bash
 npm run build
 ```
 
