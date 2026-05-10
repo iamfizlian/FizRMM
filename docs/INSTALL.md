@@ -162,6 +162,7 @@ The `full` profile adds:
 - Salt master for endpoint execution.
 - Zabbix server/web with its own PostgreSQL database.
 - Wazuh manager for endpoint inventory/log/security events.
+  - The manager image is pinned to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that repository. Override `WAZUH_MANAGER_VERSION` for another published Wazuh tag.
 - OpenSearch for search and retention.
 - `fizrmm-init`, which waits for the backing services and writes `/runtime/fizrmm/integrations.json`.
 

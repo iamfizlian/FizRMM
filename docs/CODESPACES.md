@@ -54,6 +54,8 @@ make full
 
 The `COMPOSE_PARALLEL_LIMIT=1` prefix is intentional. Some Codespaces Docker Compose builds can crash with `fatal error: concurrent map writes` while pulling many full-profile images at once. Serializing Compose image operations avoids that Docker Compose bug.
 
+The full profile pins Wazuh manager to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that image. Override `WAZUH_MANAGER_VERSION` only with a published Wazuh manager tag.
+
 Forwarded ports include:
 
 - `8080` for Keycloak.

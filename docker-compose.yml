@@ -177,7 +177,7 @@ services:
 
   wazuh-manager:
     profiles: ["full"]
-    image: wazuh/wazuh-manager:latest
+    image: wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}
     hostname: wazuh-manager
     ports:
       - "1514:1514"
