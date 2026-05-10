@@ -23,6 +23,8 @@ docker compose version
 
 ## 2. Start FizRMM
 
+If you are using GitHub Codespaces, first see [GitHub Codespaces](CODESPACES.md) for forwarded ports and dev container setup.
+
 From the repository root:
 
 ```bash
@@ -147,8 +149,10 @@ docker compose rm -f keycloak nats opensearch
 The integrated lab stack starts FizRMM plus the backing capability engines together:
 
 ```bash
-docker compose --profile full up --build
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
 ```
+
+You can also run `make full`. The `COMPOSE_PARALLEL_LIMIT=1` prefix avoids a Docker Compose concurrent-pull crash seen in some Codespaces/Compose versions when the full profile pulls many images at once.
 
 The `full` profile adds:
 
@@ -215,10 +219,35 @@ Then rebuild:
 docker compose build --no-cache
 ```
 
-### Reset everything
+### Docker Compose concurrent pull crash
 
-This stops containers and removes Compose-created volumes, including the PostgreSQL data volume:
+If `docker compose --profile full up --build` crashes with `fatal error: concurrent map writes` while pulling images, rerun the full stack with serialized Compose operations:
 
 ```bash
-docker compose --profile infra down --volumes
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
+```
+
+Or use the Makefile shortcut:
+
+```bash
+make full
+```
+
+### PostgreSQL 18 volume layout error
+
+If PostgreSQL exits with a message about data in `/var/lib/postgresql/data` or an unused mount/volume, remove the old development volume and start again:
+
+```bash
+docker compose down --volumes
+docker compose up --build
+```
+
+The Compose file mounts PostgreSQL 18 volumes at `/var/lib/postgresql`, which lets the image create its major-version-specific data directory.
+
+### Reset everything
+
+This stops containers and removes Compose-created volumes, including the PostgreSQL data volumes:
+
+```bash
+docker compose --profile full down --volumes
 ```
