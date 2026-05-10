@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
+import re
 from secrets import token_urlsafe
 from typing import Any
 from uuid import uuid4
@@ -68,6 +69,30 @@ class PostgresControlPlaneStore:
         with self._cursor(context) as cur:
             cur.execute("select id, name, status from organizations order by name")
             return [self._organization(row) for row in cur.fetchall()]
+
+    def create_organization(self, context: TenantContext, name: str, org_id: str | None = None) -> Organization:
+        if not context.platform_admin:
+            raise AccessDenied("only platform admins can create organizations")
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValidationError("organization name is required")
+        normalized_id = org_id.strip() if org_id else f"org_{re.sub(r'[^a-z0-9]+', '_', normalized_name.lower()).strip('_')}"
+        if not normalized_id or not re.fullmatch(r"[a-zA-Z0-9_-]+", normalized_id):
+            raise ValidationError("organization id may only contain letters, numbers, underscores, and hyphens")
+        with self._cursor(context) as cur:
+            cur.execute(
+                """
+                insert into organizations (id, name)
+                values (%s, %s)
+                on conflict (id) do nothing
+                returning id, name, status
+                """,
+                (normalized_id, normalized_name),
+            )
+            row = cur.fetchone()
+        if row is None:
+            raise ValidationError(f"organization already exists: {normalized_id}")
+        return self._organization(row)
 
     def list_assets(self, context: TenantContext) -> list[Asset]:
         with self._cursor(context) as cur:
@@ -279,9 +304,14 @@ class PostgresControlPlaneStore:
             "enrollment": enrollment,
             "token": token,
             "bootstrap_url": f"/api/enrollments/{token}/bootstrap.ps1",
+            "linux_bootstrap_url": f"/api/enrollments/{token}/bootstrap.sh",
             "command": (
                 "powershell.exe -ExecutionPolicy Bypass -File .\\fizrmm-bootstrap.ps1 "
                 f"-PortalUrl {config.get('portal_url')} -EnrollmentToken {token}"
+            ),
+            "linux_command": (
+                f"curl -fsSL {config.get('portal_url')}/api/enrollments/{token}/bootstrap.sh "
+                "-o fizrmm-bootstrap.sh && sudo bash ./fizrmm-bootstrap.sh"
             ),
         }
 
