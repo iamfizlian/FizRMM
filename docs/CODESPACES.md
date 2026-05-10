@@ -53,8 +53,8 @@ make full
 If you need to write the steps out manually, run:
 
 ```bash
-docker compose build api
-docker compose build portal
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build api
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
 COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
 ```
 

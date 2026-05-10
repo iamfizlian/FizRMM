@@ -22,8 +22,8 @@ full-pull:
 	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full pull
 
 full-build:
-	docker compose build api
-	docker compose build portal
+	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build api
+	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
 
 full: full-build
 	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
