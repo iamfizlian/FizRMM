@@ -7,7 +7,7 @@ RUN npm ci
 
 COPY frontend ./
 
-ENV VITE_FIZRMM_API_BASE=http://127.0.0.1:8000
+ENV VITE_DEV_PROXY_TARGET=http://api:8000
 
 EXPOSE 5173
 
