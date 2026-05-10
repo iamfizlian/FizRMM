@@ -48,7 +48,7 @@ The full profile is heavier and may need a larger Codespaces machine size becaus
 make full
 ```
 
-`make full` intentionally builds the local `api` and `portal` images one at a time, then starts the full profile with serialized Compose pulls and `--no-build`. This avoids both the Compose concurrent-pull crash (`fatal error: concurrent map writes`) and the extra temporary disk pressure of exporting local images while the large full-profile images are unpacking.
+`make full` intentionally builds the local `api` and `portal` images one at a time, then starts the full profile with serialized Compose pulls and `--no-build`. The portal image keeps `node_modules` out of the image export; Compose mounts a `frontend_node_modules` volume and installs dependencies there on first start. This avoids both the Compose concurrent-pull crash (`fatal error: concurrent map writes`) and the extra temporary disk pressure of exporting local images while the large full-profile images are unpacking.
 
 If you need to write the steps out manually, run:
 
@@ -58,7 +58,7 @@ COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
 COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
 ```
 
-If Docker reports `no space left on device`, run `make docker-prune` to remove unused BuildKit cache and dangling images. For Codespaces that have already accumulated many large images or volumes, you may still need to move to a larger machine size or remove unused volumes after saving any data you need.
+If Docker reports `no space left on device`, run `make docker-prune` to remove unused BuildKit cache and dangling images. If a failed run leaves frontend dependencies partially installed, run `docker compose down` and `docker volume rm fizrmm_frontend_node_modules` before trying again. For Codespaces that have already accumulated many large images or volumes, you may still need to move to a larger machine size or remove unused volumes after saving any data you need.
 
 The full profile pins Wazuh manager to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that image. Override `WAZUH_MANAGER_VERSION` only with a published Wazuh manager tag.
 

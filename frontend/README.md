@@ -8,6 +8,8 @@ For full project setup, see [../docs/INSTALL.md](../docs/INSTALL.md). The recomm
 docker compose up --build portal
 ```
 
+The Compose portal service mounts `./frontend` into the container and keeps `node_modules` in the named `frontend_node_modules` volume. This keeps the Docker image small and avoids exporting the dependency tree into the image layer during full-profile builds. The first portal start installs dependencies into that volume with `npm ci`.
+
 ## Install
 
 Manual frontend install, without Docker:

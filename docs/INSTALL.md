@@ -152,7 +152,7 @@ The integrated lab stack starts FizRMM plus the backing capability engines toget
 make full
 ```
 
-The Makefile builds the local `api` and `portal` images one at a time before starting the full profile with `--no-build`. That ordering avoids the extra temporary disk pressure caused by exporting both local images while the large full-profile images are being pulled or unpacked.
+The Makefile builds the local `api` and `portal` images one at a time before starting the full profile with `--no-build`. The portal image intentionally does not bake `node_modules`; Compose mounts the frontend source and a `frontend_node_modules` volume, then installs dependencies in that volume on first container start. That ordering and image layout avoid the extra temporary disk pressure caused by exporting both local images and the frontend dependency tree while the large full-profile images are being pulled or unpacked.
 
 If you prefer raw Compose commands, use the same sequence:
 
@@ -248,7 +248,7 @@ COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
 
 ### Docker reports `no space left on device` during `make full`
 
-The full lab profile pulls several large upstream images. If Docker's storage directory is already close to full, BuildKit may fail while exporting the local `api` or `portal` image. First remove unused Docker build cache and dangling images:
+The full lab profile pulls several large upstream images. If Docker's storage directory is already close to full, BuildKit may still fail while exporting images or installing frontend dependencies into the `frontend_node_modules` volume. First remove unused Docker build cache and dangling images:
 
 ```bash
 make docker-prune
@@ -259,6 +259,14 @@ If you still need space, inspect Docker usage before deleting volumes that may c
 ```bash
 docker system df
 docker volume ls
+```
+
+If frontend dependencies are stale or partially installed after a failed run, remove only the portal dependency volume and start again:
+
+```bash
+docker compose down
+docker volume rm fizrmm_frontend_node_modules
+make full
 ```
 
 Only after saving any data you need, remove stopped containers and unused images/volumes with Docker's broader prune commands.

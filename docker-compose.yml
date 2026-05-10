@@ -70,6 +70,9 @@ services:
       VITE_DEV_PROXY_TARGET: ${FIZRMM_DEV_PROXY_TARGET:-http://api:8000}
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
     depends_on:
       api:
         condition: service_healthy
@@ -221,6 +224,7 @@ volumes:
   postgres18_data:
   opensearch_data:
   runtime_config:
+  frontend_node_modules:
   meshcentral_data:
   meshcentral_files:
   salt_etc:
