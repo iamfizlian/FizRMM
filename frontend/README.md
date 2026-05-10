@@ -41,10 +41,16 @@ npm run build
 
 ## API URL
 
-By default, the portal calls `http://127.0.0.1:8000`.
+By default, the portal calls same-origin `/api` routes. In development, Vite proxies those API requests to `http://127.0.0.1:8000`. Docker Compose overrides the proxy target to `http://api:8000` so Codespaces and remote browser sessions work through the forwarded portal URL.
 
-Override it with:
+Override the Vite proxy target for local development with:
 
 ```bash
-VITE_FIZRMM_API_BASE=http://127.0.0.1:8001 npm run dev -- --port 5173
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:8001 npm run dev -- --port 5173
+```
+
+If you need the browser to call a fully separate API origin directly, set `VITE_FIZRMM_API_BASE`:
+
+```bash
+VITE_FIZRMM_API_BASE=https://api.example.test npm run dev -- --port 5173
 ```
