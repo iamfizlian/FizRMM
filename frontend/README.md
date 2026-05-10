@@ -39,11 +39,13 @@ Open `http://127.0.0.1:5173/`.
 
 ## Build
 
-Use the Docker-backed build from the repository root if your host does not have npm installed:
+Use the Docker-backed build if your host does not have npm installed. This works from the repository root or from `frontend/`:
 
 ```bash
 make frontend-build
 ```
+
+The frontend Makefile also delegates full-stack helpers to the repository root, so `make full`, `make full-build`, and `make full-pull` work from this directory.
 
 Or build directly when npm is available locally:
 

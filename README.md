@@ -61,7 +61,7 @@ Backend tests run directly with Python:
 PYTHONPATH=backend/src python3 -m unittest discover backend/tests
 ```
 
-Build the frontend through Docker if your host does not have Node.js/npm installed:
+Build the frontend through Docker if your host does not have Node.js/npm installed. The same target works from the repository root or from `frontend/`:
 
 ```bash
 make frontend-build
