@@ -12,6 +12,8 @@ The Compose portal service mounts `./frontend` into the container and keeps `nod
 
 ## Install
 
+No host Node.js/npm install is required for the Docker workflow. Compose installs dependencies into the `frontend_node_modules` volume the first time the portal container starts.
+
 Manual frontend install, without Docker:
 
 ```bash
@@ -36,6 +38,14 @@ npm run dev -- --port 5173
 Open `http://127.0.0.1:5173/`.
 
 ## Build
+
+Use the Docker-backed build from the repository root if your host does not have npm installed:
+
+```bash
+make frontend-build
+```
+
+Or build directly when npm is available locally:
 
 ```bash
 npm run build

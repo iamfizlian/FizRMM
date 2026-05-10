@@ -79,7 +79,13 @@ source .venv/bin/activate
 PYTHONPATH=backend/src python3 -m unittest discover backend/tests
 ```
 
-Build the portal directly:
+Build the portal through Docker when you want the same path used by hosts that do not have Node.js/npm installed:
+
+```bash
+make frontend-build
+```
+
+Because the devcontainer installs frontend dependencies, you can also build directly inside Codespaces:
 
 ```bash
 cd frontend

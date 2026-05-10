@@ -53,10 +53,23 @@ curl -i -H 'X-FizRMM-Orgs: org_acme' http://127.0.0.1:8000/api/assets/asset-glob
 
 The last command should return `403 Forbidden`; that is the tenant boundary test.
 
-## Tests Without Docker
+## Tests
+
+Backend tests run directly with Python:
 
 ```bash
 PYTHONPATH=backend/src python3 -m unittest discover backend/tests
+```
+
+Build the frontend through Docker if your host does not have Node.js/npm installed:
+
+```bash
+make frontend-build
+```
+
+If you do have npm installed locally, you can also build from `frontend/`:
+
+```bash
 cd frontend
 npm run build
 ```

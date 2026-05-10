@@ -1,4 +1,4 @@
-.PHONY: backend test-backend frontend docker-up docker-down infra full full-build full-pull docker-prune
+.PHONY: backend test-backend frontend frontend-build docker-up docker-down infra full full-build full-pull docker-prune
 
 backend:
 	PYTHONPATH=backend/src python3 -m fizrmm
@@ -8,6 +8,10 @@ test-backend:
 
 frontend:
 	cd frontend && npm run dev
+
+frontend-build:
+	docker compose build portal
+	docker compose run --rm --no-deps portal sh -c 'if [ ! -d node_modules/vite ] || [ ! -d node_modules/react ]; then npm ci; fi; npm run build'
 
 docker-up:
 	docker compose up --build
