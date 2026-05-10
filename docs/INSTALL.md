@@ -149,10 +149,20 @@ docker compose rm -f keycloak nats opensearch
 The integrated lab stack starts FizRMM plus the backing capability engines together:
 
 ```bash
-COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
+make full
 ```
 
-You can also run `make full`. The `COMPOSE_PARALLEL_LIMIT=1` prefix avoids a Docker Compose concurrent-pull crash seen in some Codespaces/Compose versions when the full profile pulls many images at once.
+The Makefile builds the local `api` and `portal` images one at a time before starting the full profile with `--no-build`. That ordering avoids the extra temporary disk pressure caused by exporting both local images while the large full-profile images are being pulled or unpacked.
+
+If you prefer raw Compose commands, use the same sequence:
+
+```bash
+docker compose build api
+docker compose build portal
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
+```
+
+The `COMPOSE_PARALLEL_LIMIT=1` prefix avoids a Docker Compose concurrent-pull crash seen in some Codespaces/Compose versions when the full profile pulls many images at once.
 
 The `full` profile adds:
 
@@ -222,17 +232,36 @@ docker compose build --no-cache
 
 ### Docker Compose concurrent pull crash
 
-If `docker compose --profile full up --build` crashes with `fatal error: concurrent map writes` while pulling images, rerun the full stack with serialized Compose operations:
-
-```bash
-COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
-```
-
-Or use the Makefile shortcut:
+If `docker compose --profile full up --build` crashes with `fatal error: concurrent map writes` while pulling images, use the Makefile shortcut. It serializes local image builds and starts Compose with serialized pull operations:
 
 ```bash
 make full
 ```
+
+The equivalent raw Compose sequence is:
+
+```bash
+docker compose build api
+docker compose build portal
+COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
+```
+
+### Docker reports `no space left on device` during `make full`
+
+The full lab profile pulls several large upstream images. If Docker's storage directory is already close to full, BuildKit may fail while exporting the local `api` or `portal` image. First remove unused Docker build cache and dangling images:
+
+```bash
+make docker-prune
+```
+
+If you still need space, inspect Docker usage before deleting volumes that may contain development data:
+
+```bash
+docker system df
+docker volume ls
+```
+
+Only after saving any data you need, remove stopped containers and unused images/volumes with Docker's broader prune commands.
 
 ### PostgreSQL 18 volume layout error
 

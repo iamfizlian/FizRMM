@@ -1,4 +1,4 @@
-.PHONY: backend test-backend frontend docker-up docker-down infra full full-pull
+.PHONY: backend test-backend frontend docker-up docker-down infra full full-build full-pull docker-prune
 
 backend:
 	PYTHONPATH=backend/src python3 -m fizrmm
@@ -21,5 +21,13 @@ infra:
 full-pull:
 	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full pull
 
-full:
-	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --build
+full-build:
+	docker compose build api
+	docker compose build portal
+
+full: full-build
+	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
+
+docker-prune:
+	docker builder prune -f
+	docker image prune -f
