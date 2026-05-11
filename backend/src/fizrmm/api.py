@@ -16,6 +16,31 @@ from .models import AccessDenied, NotFound, TenantContext, ValidationError, to_j
 from .store import InMemoryControlPlaneStore, seed_store
 
 
+def request_base_url(headers: Any) -> str:
+    forwarded_host = str(headers.get("X-Forwarded-Host") or "").split(",", 1)[0].strip()
+    host = forwarded_host or str(headers.get("Host") or "").split(",", 1)[0].strip()
+    if not host:
+        return ""
+    proto = str(headers.get("X-Forwarded-Proto") or "http").split(",", 1)[0].strip() or "http"
+    return f"{proto}://{host}".rstrip("/")
+
+
+def is_local_or_internal_url(value: object) -> bool:
+    parsed = urlparse(str(value or ""))
+    hostname = (parsed.hostname or "").lower()
+    return hostname in {"", "localhost", "127.0.0.1", "0.0.0.0", "api"}
+
+
+def public_portal_url(headers: Any, stored_url: object = "") -> str:
+    explicit = os.getenv("FIZRMM_PUBLIC_URL", "").strip().rstrip("/")
+    if explicit and not is_local_or_internal_url(explicit):
+        return explicit
+    request_url = request_base_url(headers)
+    if request_url and (not stored_url or is_local_or_internal_url(stored_url)):
+        return request_url
+    return str(stored_url or request_url or deployment_config()["portal_url"]).rstrip("/")
+
+
 def default_store() -> InMemoryControlPlaneStore:
     database_url = os.getenv("DATABASE_URL")
     if database_url:
@@ -362,11 +387,11 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             return integration_status()
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "bootstrap.ps1":
             enrollment = STORE.get_enrollment_by_token(parts[2])
-            portal_url = str(enrollment.config.get("portal_url") or deployment_config()["portal_url"])
+            portal_url = public_portal_url(self.headers, enrollment.config.get("portal_url"))
             return TextResponse(render_windows_bootstrap(portal_url, parts[2]), "text/plain; charset=utf-8")
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "bootstrap.sh":
             enrollment = STORE.get_enrollment_by_token(parts[2])
-            portal_url = str(enrollment.config.get("portal_url") or deployment_config()["portal_url"])
+            portal_url = public_portal_url(self.headers, enrollment.config.get("portal_url"))
             return TextResponse(render_linux_bootstrap(portal_url, parts[2]), "text/x-shellscript; charset=utf-8")
         raise NotFound("route not found")
 
@@ -386,11 +411,13 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             if expires_hours < 1 or expires_hours > 168:
                 raise ValidationError("expires_hours must be between 1 and 168")
             expires_at = datetime.now(UTC) + timedelta(hours=expires_hours)
+            config = deployment_config()
+            config["portal_url"] = public_portal_url(self.headers, config.get("portal_url"))
             return STORE.create_enrollment(
                 context=context,
                 org_id=payload.get("org_id", context.allowed_org_ids[0] if context.allowed_org_ids else ""),
                 site=payload.get("site", "Default"),
-                config=deployment_config(),
+                config=config,
                 expires_at=expires_at.isoformat(),
             )
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "claim":

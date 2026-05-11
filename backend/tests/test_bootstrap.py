@@ -37,5 +37,36 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("/api/enrollments/$EnrollmentToken/report", script)
 
 
+class PublicPortalUrlTests(unittest.TestCase):
+    def setUp(self):
+        import os
+        self.previous_public_url = os.environ.get("FIZRMM_PUBLIC_URL")
+        os.environ.pop("FIZRMM_PUBLIC_URL", None)
+
+    def tearDown(self):
+        import os
+        if self.previous_public_url is None:
+            os.environ.pop("FIZRMM_PUBLIC_URL", None)
+        else:
+            os.environ["FIZRMM_PUBLIC_URL"] = self.previous_public_url
+
+    def test_request_host_replaces_loopback_portal_url_for_bootstrap(self):
+        from fizrmm.api import public_portal_url
+
+        portal_url = public_portal_url({"Host": "164.152.27.91:8000"}, "http://127.0.0.1:8000")
+
+        self.assertEqual(portal_url, "http://164.152.27.91:8000")
+
+    def test_forwarded_host_is_used_for_proxied_portal_requests(self):
+        from fizrmm.api import public_portal_url
+
+        portal_url = public_portal_url(
+            {"Host": "api:8000", "X-Forwarded-Host": "164.152.27.91:5173", "X-Forwarded-Proto": "http"},
+            "http://127.0.0.1:8000",
+        )
+
+        self.assertEqual(portal_url, "http://164.152.27.91:5173")
+
+
 if __name__ == "__main__":
     unittest.main()
