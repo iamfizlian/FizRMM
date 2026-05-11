@@ -8,10 +8,10 @@ This is an early development slice, not a production RMM yet. It gives you a wor
 
 There is now one supported Docker startup path for an RMM lab install: start the full stack. The smaller API/portal-only Compose mode is no longer documented as an install because it cannot provide remote access, monitoring, logs, or script execution services by itself.
 
-You need Docker Compose. From the repo root:
+You need Docker Compose. From the repo root, use one command:
 
 ```bash
-make full
+make start
 ```
 
 That builds the local API and portal images serially, then starts PostgreSQL, the FizRMM portal/API, Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, OpenSearch, and the `fizrmm-init` job. The serialized Makefile path avoids Docker Compose concurrent-pull crashes and reduces temporary disk pressure on small hosts.
@@ -28,10 +28,16 @@ On a cloud VM, replace `127.0.0.1` with the public IP only after opening the req
 
 The Wazuh manager image is pinned to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that repository. Override `WAZUH_MANAGER_VERSION` when testing another published Wazuh tag.
 
-Stop it:
+Stop the running FizRMM containers:
 
 ```bash
-docker compose down
+make stop
+```
+
+Stop and start again in one command:
+
+```bash
+make restart
 ```
 
 For the full Docker setup guide, see [docs/INSTALL.md](docs/INSTALL.md). To run in GitHub Codespaces, see [docs/CODESPACES.md](docs/CODESPACES.md).

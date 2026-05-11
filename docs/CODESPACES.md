@@ -13,7 +13,7 @@ FizRMM can run in a GitHub Codespace for development and demos. The dev containe
 The universal Codespaces image includes Docker tooling, so no extra Docker devcontainer feature is required. From the Codespaces terminal, use the same install path as other hosts:
 
 ```bash
-make full
+make start
 ```
 
 Open the forwarded ports panel and use:
@@ -40,12 +40,12 @@ If PostgreSQL exits with a `/var/lib/postgresql/data` volume-layout error, reset
 
 ```bash
 docker compose down --volumes
-make full
+make start
 ```
 
 ## Startup details
 
-`make full` intentionally builds the local `api` and `portal` images one at a time, then starts Compose with serialized pulls and `--no-build`. The portal image keeps `node_modules` out of the image export; Compose mounts a `frontend_node_modules` volume and installs dependencies there on first start. This avoids both the Compose concurrent-pull crash (`fatal error: concurrent map writes`) and the extra temporary disk pressure of exporting local images while the large lab images are unpacking.
+`make start` intentionally builds the local `api` and `portal` images one at a time, then starts Compose with serialized pulls and `--no-build`. The portal image keeps `node_modules` out of the image export; Compose mounts a `frontend_node_modules` volume and installs dependencies there on first start. This avoids both the Compose concurrent-pull crash (`fatal error: concurrent map writes`) and the extra temporary disk pressure of exporting local images while the large lab images are unpacking.
 
 If you need to write the steps out manually, run:
 
@@ -55,7 +55,7 @@ COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
 COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
 ```
 
-If Docker reports `no space left on device`, run `make docker-prune` to remove unused BuildKit cache and dangling images. If a failed run leaves frontend dependencies partially installed, run `docker compose down` and `docker volume rm fizrmm_frontend_node_modules` before trying again. For Codespaces that have already accumulated many large images or volumes, you may still need to move to a larger machine size or remove unused volumes after saving any data you need.
+If Docker reports `no space left on device`, run `make docker-prune` to remove unused BuildKit cache and dangling images. If a failed run leaves frontend dependencies partially installed, run `make stop` and `docker volume rm fizrmm_frontend_node_modules` before trying again. For Codespaces that have already accumulated many large images or volumes, you may still need to move to a larger machine size or remove unused volumes after saving any data you need.
 
 The Wazuh manager image is pinned to `wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}` because Docker Hub does not publish a `latest` tag for that image. Override `WAZUH_MANAGER_VERSION` only with a published Wazuh manager tag.
 
@@ -103,6 +103,6 @@ VITE_DEV_PROXY_TARGET=http://127.0.0.1:8001 npm run dev -- --host 0.0.0.0 --port
 ## Notes
 
 - The devcontainer intentionally avoids the `docker-outside-of-docker` feature because the universal Codespaces image already provides Docker tooling and the extra feature can fail during upstream apt repository key rotations.
-- `make full` is the recommended Codespaces path because the portal-only control plane is not useful as an RMM by itself.
+- `make start` is the recommended Codespaces path because the portal-only control plane is not useful as an RMM by itself.
 - The lab stack is memory-intensive because it starts the backing service UIs too.
 - Codespaces forwarded URLs are public/private according to your Codespaces port visibility settings; keep development credentials out of production use.

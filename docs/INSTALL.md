@@ -24,12 +24,10 @@ docker compose version
 
 ## 2. Start FizRMM
 
-If you are using GitHub Codespaces, first see [GitHub Codespaces](CODESPACES.md) for forwarded ports and dev container setup.
-
-From the repository root:
+From the repository root, use one command:
 
 ```bash
-make full
+make start
 ```
 
 The Makefile builds the local `api` and `portal` images one at a time before starting the full stack. This avoids Docker Compose concurrent-pull crashes and reduces temporary image-export disk pressure.
@@ -97,7 +95,13 @@ HTTP/1.0 403 Forbidden
 Stop the stack:
 
 ```bash
-docker compose down
+make stop
+```
+
+Stop and start it again in one command:
+
+```bash
+make restart
 ```
 
 View service logs:
@@ -160,7 +164,7 @@ COMPOSE_PARALLEL_LIMIT=1 docker compose build --no-cache api portal
 If raw Compose crashes with `fatal error: concurrent map writes` while pulling images, use the Makefile shortcut. It serializes local image builds and starts Compose with serialized pull operations:
 
 ```bash
-make full
+make start
 ```
 
 The equivalent raw Compose sequence is:
@@ -171,7 +175,7 @@ COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
 COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
 ```
 
-### Docker reports `no space left on device` during `make full`
+### Docker reports `no space left on device` during `make start`
 
 The lab stack pulls several large upstream images. If Docker's storage directory is already close to full, BuildKit may still fail while exporting images or installing frontend dependencies into the `frontend_node_modules` volume. First remove unused Docker build cache and dangling images:
 
@@ -189,9 +193,9 @@ docker volume ls
 If frontend dependencies are stale or partially installed after a failed run, remove only the portal dependency volume and start again:
 
 ```bash
-docker compose down
+make stop
 docker volume rm fizrmm_frontend_node_modules
-make full
+make start
 ```
 
 Only after saving any data you need, remove stopped containers and unused images/volumes with Docker's broader prune commands.
@@ -202,7 +206,7 @@ If PostgreSQL exits with a message about data in `/var/lib/postgresql/data` or a
 
 ```bash
 docker compose down --volumes
-make full
+make start
 ```
 
 The Compose file mounts PostgreSQL 18 volumes at `/var/lib/postgresql`, which lets the image create its major-version-specific data directory.

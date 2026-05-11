@@ -2,10 +2,16 @@
 
 The frontend is a Vite React technician portal shell for the current FizRMM prototype.
 
-For full project setup, see [../docs/INSTALL.md](../docs/INSTALL.md). The recommended local path is Docker:
+For full project setup, see [../docs/INSTALL.md](../docs/INSTALL.md). The recommended Docker install/start path is a single Make target from the repository root or this `frontend/` directory:
 
 ```bash
-docker compose up --build portal
+make start
+```
+
+Stop it with:
+
+```bash
+make stop
 ```
 
 The Compose portal service mounts `./frontend` into the container and keeps `node_modules` in the named `frontend_node_modules` volume. This keeps the Docker image small and avoids exporting the dependency tree into the image layer during full-profile builds. The first portal start installs dependencies into that volume with `npm ci`.
@@ -45,7 +51,7 @@ Use the Docker-backed build if your host does not have npm installed. This works
 make frontend-build
 ```
 
-The frontend Makefile also delegates backend and full-stack helpers to the repository root, so `make test-backend`, `make full`, `make full-build`, and `make full-pull` work from this directory.
+The frontend Makefile also delegates backend and stack helpers to the repository root, so `make test-backend`, `make start`, `make stop`, `make restart`, `make full-build`, and `make full-pull` work from this directory.
 
 Or build directly when npm is available locally:
 

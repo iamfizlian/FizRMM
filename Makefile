@@ -1,4 +1,4 @@
-.PHONY: backend test-backend frontend frontend-build install up docker-up docker-down infra full full-build full-pull docker-prune
+.PHONY: backend test-backend frontend frontend-build install start up docker-up stop docker-down restart infra full full-build full-pull docker-prune
 
 backend:
 	PYTHONPATH=backend/src python3 -m fizrmm
@@ -13,10 +13,12 @@ frontend-build:
 	docker compose build portal
 	docker compose run --rm --no-deps portal sh -c 'if [ ! -d node_modules/vite ] || [ ! -d node_modules/react ]; then npm ci; fi; npm run build'
 
-install up docker-up: full
+install start up docker-up: full
 
-docker-down:
-	docker compose down
+stop docker-down:
+	docker compose down --remove-orphans
+
+restart: stop full
 
 infra:
 	docker compose up -d postgres keycloak nats opensearch
