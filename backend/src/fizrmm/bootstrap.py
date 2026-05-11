@@ -127,11 +127,20 @@ need_cmd python3
 json_post() {{
   local path="$1"
   local body="$2"
-  curl -fsS \
+  local response status
+  response="$(curl -sS \
     -H 'Content-Type: application/json' \
     -X POST \
     -d "$body" \
-    "$PORTAL_URL$path"
+    -w '\n%{{http_code}}' \
+    "$PORTAL_URL$path")"
+  status="${{response##*$'\n'}}"
+  response="${{response%$'\n'*}}"
+  if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+    echo "FizRMM API $path failed with HTTP $status: $response" >&2
+    exit 1
+  fi
+  printf '%s' "$response"
 }}
 
 json_get() {{
@@ -145,7 +154,7 @@ json_string() {{
 
 HOSTNAME_VALUE="$(hostname -f 2>/dev/null || hostname)"
 OS_VALUE="$(. /etc/os-release 2>/dev/null && echo "${{PRETTY_NAME:-Linux}}" || uname -s)"
-CLAIM_BODY="{{\"hostname\":$(json_string "$HOSTNAME_VALUE"),\"operating_system\":$(json_string "$OS_VALUE")}}"
+CLAIM_BODY="$(python3 -c 'import json,sys; print(json.dumps({{"hostname": sys.argv[1], "operating_system": sys.argv[2]}}))' "$HOSTNAME_VALUE" "$OS_VALUE")"
 CLAIM_RESPONSE="$(json_post "/api/enrollments/$ENROLLMENT_TOKEN/claim" "$CLAIM_BODY")"
 ASSET_ID="$(printf '%s' "$CLAIM_RESPONSE" | json_get 'data.get("asset_id", "")')"
 

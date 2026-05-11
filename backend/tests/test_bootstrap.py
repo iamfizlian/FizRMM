@@ -34,6 +34,51 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("skipped_no_installer_url", script)
         self.assertIn("linux_installer_url", script)
 
+    def test_rendered_linux_bootstrap_runs_against_api(self):
+        import os
+        import subprocess
+        import tempfile
+        import threading
+        import time
+        import urllib.request
+
+        from fizrmm.api import deployment_config, make_server
+
+        store = seed_store()
+        config = deployment_config()
+        config["portal_url"] = "http://127.0.0.1:8766"
+        enrollment = store.create_enrollment(
+            TenantContext(user_id="tech", allowed_org_ids=("org_acme",)),
+            "org_acme",
+            "Acme HQ",
+            config,
+            "2099-01-01T00:00:00+00:00",
+        )
+        token = enrollment["token"]
+        server = make_server("127.0.0.1", 8766, store)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        time.sleep(0.05)
+
+        try:
+            script = urllib.request.urlopen(
+                f"http://127.0.0.1:8766/api/enrollments/{token}/bootstrap.sh",
+                timeout=2,
+            ).read().decode("utf-8")
+            with tempfile.NamedTemporaryFile("w", delete=False) as handle:
+                handle.write(script)
+                path = handle.name
+            os.chmod(path, 0o755)
+            result = subprocess.run(["bash", path], text=True, capture_output=True, timeout=10)
+        finally:
+            server.shutdown()
+            server.server_close()
+            if "path" in locals():
+                os.unlink(path)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("FizRMM Linux bootstrap complete", result.stdout)
+
     def test_linux_bootstrap_does_not_use_windows_installer_fallbacks(self):
         script = render_linux_bootstrap("http://127.0.0.1:8000", "token-123")
 
