@@ -34,7 +34,13 @@ Stop the running FizRMM containers:
 make stop
 ```
 
-Stop and start again in one command:
+After `git pull`, rebuild and restart the running Docker stack with one command:
+
+```bash
+make update
+```
+
+Stop and start again without pulling code:
 
 ```bash
 make restart

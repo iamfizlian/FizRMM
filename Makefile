@@ -1,4 +1,4 @@
-.PHONY: backend test-backend frontend frontend-build install start up docker-up stop docker-down restart infra full full-build full-pull docker-prune
+.PHONY: backend test-backend frontend frontend-build install start up docker-up stop docker-down restart update infra full full-build full-pull docker-prune
 
 backend:
 	PYTHONPATH=backend/src python3 -m fizrmm
@@ -18,7 +18,7 @@ install start up docker-up: full
 stop docker-down:
 	docker compose down --remove-orphans
 
-restart: stop full
+restart update: stop full
 
 infra:
 	docker compose up -d postgres keycloak nats opensearch

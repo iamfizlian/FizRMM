@@ -25,6 +25,8 @@ Open the forwarded ports panel and use:
 - `8081` for Zabbix Web.
 - `8080` for Keycloak.
 
+If the stack is already running and you have just pulled updates from GitHub, run `make update`; it stops, rebuilds, and starts the same supported stack without removing volumes.
+
 The portal should be available through the Codespaces forwarded URL for port `5173`. In Docker Compose, the portal calls the API through Vite's dev proxy, so browser requests use the same forwarded `5173` origin and do not need a separate public API URL.
 
 Once the portal opens, you can exercise the current RMM control-plane workflows:

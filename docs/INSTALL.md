@@ -92,13 +92,21 @@ HTTP/1.0 403 Forbidden
 
 ## 5. Stop Or Update
 
+If Docker is already running and you have pulled updates from GitHub, rebuild and restart the stack with one command:
+
+```bash
+make update
+```
+
+This keeps Docker volumes such as PostgreSQL data unless you explicitly run a volume-removal command.
+
 Stop the stack:
 
 ```bash
 make stop
 ```
 
-Stop and start it again in one command:
+Stop and start it again without pulling code:
 
 ```bash
 make restart

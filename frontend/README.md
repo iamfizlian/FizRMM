@@ -14,6 +14,12 @@ Stop it with:
 make stop
 ```
 
+After pulling updates from GitHub while Docker is already running, apply them with:
+
+```bash
+make update
+```
+
 The Compose portal service mounts `./frontend` into the container and keeps `node_modules` in the named `frontend_node_modules` volume. This keeps the Docker image small and avoids exporting the dependency tree into the image layer during full-profile builds. The first portal start installs dependencies into that volume with `npm ci`.
 
 ## Install
@@ -51,7 +57,7 @@ Use the Docker-backed build if your host does not have npm installed. This works
 make frontend-build
 ```
 
-The frontend Makefile also delegates backend and stack helpers to the repository root, so `make test-backend`, `make start`, `make stop`, `make restart`, `make full-build`, and `make full-pull` work from this directory.
+The frontend Makefile also delegates backend and stack helpers to the repository root, so `make test-backend`, `make start`, `make stop`, `make update`, `make restart`, `make full-build`, and `make full-pull` work from this directory.
 
 Or build directly when npm is available locally:
 
