@@ -36,6 +36,28 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("/api/enrollments/$EnrollmentToken/claim", script)
         self.assertIn("/api/enrollments/$EnrollmentToken/report", script)
 
+    def test_enrollment_claim_and_report_are_idempotent_for_retries(self):
+        store = seed_store()
+        enrollment = store.create_enrollment(
+            TenantContext(user_id="tech", allowed_org_ids=("org_acme",)),
+            "org_acme",
+            "Acme HQ",
+            {"portal_url": "http://server:8000"},
+            "2099-01-01T00:00:00+00:00",
+        )
+        token = enrollment["token"]
+
+        first_claim = store.claim_enrollment(token, "retry-host", "Linux")
+        second_claim = store.claim_enrollment(token, "retry-host", "Linux")
+
+        self.assertEqual(second_claim["asset_id"], first_claim["asset_id"])
+
+        first_report = store.report_enrollment(token, [{"agent": "salt", "status": "reported"}])
+        second_report = store.report_enrollment(token, [{"agent": "salt", "status": "reported"}])
+
+        self.assertEqual(first_report["status"], "completed")
+        self.assertEqual(second_report["status"], "completed")
+
 
 class PublicPortalUrlTests(unittest.TestCase):
     def setUp(self):

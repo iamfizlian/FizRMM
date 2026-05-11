@@ -351,7 +351,18 @@ class PostgresControlPlaneStore:
         if not operating_system.strip():
             raise ValidationError("operating_system is required")
 
-        enrollment = self._active_enrollment(token)
+        enrollment = self.get_enrollment_by_token(token)
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
+        if enrollment.status in {"claimed", "completed"} and enrollment.asset_id:
+            return {
+                "asset_id": enrollment.asset_id,
+                "org_id": enrollment.org_id,
+                "site": enrollment.site,
+                "config": enrollment.config,
+            }
+        if enrollment.status != "active":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
         asset_id = enrollment.asset_id or f"asset-{uuid4()}"
         with self._system_cursor() as cur:
             cur.execute(
@@ -405,14 +416,16 @@ class PostgresControlPlaneStore:
         from psycopg.types.json import Jsonb
 
         enrollment = self.get_enrollment_by_token(token)
-        if enrollment.status != "claimed":
-            raise ValidationError(f"enrollment token is {enrollment.status}")
-        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
-            raise ValidationError("enrollment token has expired")
-        if enrollment.asset_id is None:
-            raise ValueError("enrollment must be claimed before reporting")
         if not isinstance(agents, list):
             raise ValidationError("agents must be a list")
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
+        if enrollment.status == "completed":
+            return {"asset_id": enrollment.asset_id, "status": enrollment.status, "agents_reported": len(agents)}
+        if enrollment.status != "claimed":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
+        if enrollment.asset_id is None:
+            raise ValueError("enrollment must be claimed before reporting")
 
         with self._system_cursor() as cur:
             for agent_report in agents:

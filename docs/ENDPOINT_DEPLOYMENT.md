@@ -59,10 +59,11 @@ The response includes:
 
 The portal **Enroll endpoint** view also exposes these values and includes a direct `fizrmm-bootstrap.ps1` download link.
 
-Download the bootstrap script:
+Download the bootstrap script. Replace the token value with the exact token returned by the portal/API; do not type angle brackets in a shell command.
 
 ```bash
-curl -o fizrmm-bootstrap.ps1 http://127.0.0.1:8000/api/enrollments/<token>/bootstrap.ps1
+TOKEN="paste-the-enrollment-token-here"
+curl -o fizrmm-bootstrap.ps1 "http://127.0.0.1:8000/api/enrollments/${TOKEN}/bootstrap.ps1"
 ```
 
 Run the script on the Windows PC from an elevated PowerShell session:
@@ -100,14 +101,15 @@ For a Linux endpoint, create the same enrollment token with `POST /api/enrollmen
 - `linux_bootstrap_url`
 - `linux_command`
 
-Download and run the Linux bootstrap script as root:
+Download and run the Linux bootstrap script as root. Replace the token value with the exact token returned by the portal/API; do not type the angle brackets because shells treat `<token>` as input redirection.
 
 ```bash
-curl -fsSL http://127.0.0.1:8000/api/enrollments/<token>/bootstrap.sh -o fizrmm-bootstrap.sh
+TOKEN="paste-the-enrollment-token-here"
+curl -fsSL "http://127.0.0.1:8000/api/enrollments/${TOKEN}/bootstrap.sh" -o fizrmm-bootstrap.sh
 sudo bash ./fizrmm-bootstrap.sh
 ```
 
-Or run the one-line `linux_command` returned by the API/portal. The Linux bootstrapper:
+Or run the one-line `linux_command` returned by the API/portal, which already includes the exact token and URL. The claim/report calls are safe to retry during a bootstrap rerun while the enrollment remains valid, so rerunning the same script after an interrupted install reuses the already-created asset instead of failing because the token is already claimed. The Linux bootstrapper:
 
 1. Verifies it is running as root.
 2. Claims the enrollment token with hostname and Linux OS information.

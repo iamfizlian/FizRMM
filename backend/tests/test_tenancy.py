@@ -99,7 +99,7 @@ class TenancyTests(unittest.TestCase):
         self.assertEqual(report["status"], "completed")
         self.assertEqual(agents[0].agent, "meshcentral")
 
-    def test_enrollment_token_cannot_be_claimed_twice(self):
+    def test_enrollment_token_claim_is_idempotent_for_retries(self):
         enrollment = self.store.create_enrollment(
             self.acme_tech,
             "org_acme",
@@ -108,10 +108,10 @@ class TenancyTests(unittest.TestCase):
             "2099-01-01T00:00:00+00:00",
         )
 
-        self.store.claim_enrollment(enrollment["token"], "ACME-ONE", "Windows 11 Pro")
+        first_claim = self.store.claim_enrollment(enrollment["token"], "ACME-ONE", "Windows 11 Pro")
+        second_claim = self.store.claim_enrollment(enrollment["token"], "ACME-TWO", "Windows 11 Pro")
 
-        with self.assertRaises(ValidationError):
-            self.store.claim_enrollment(enrollment["token"], "ACME-TWO", "Windows 11 Pro")
+        self.assertEqual(second_claim["asset_id"], first_claim["asset_id"])
 
     def test_expired_enrollment_token_is_rejected(self):
         enrollment = self.store.create_enrollment(
