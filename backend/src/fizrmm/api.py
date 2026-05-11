@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .auth import context_from_authorization
-from .bootstrap import render_windows_bootstrap
+from .bootstrap import render_linux_bootstrap, render_windows_bootstrap
 from .integrations.config import load_runtime_config, runtime_bootstrap_value, runtime_service_value
 from .models import AccessDenied, NotFound, TenantContext, ValidationError, to_jsonable
 from .store import InMemoryControlPlaneStore, seed_store
@@ -49,6 +49,16 @@ def deployment_config() -> dict[str, object]:
                 "install_args",
                 os.getenv("MESHCENTRAL_AGENT_INSTALL_ARGS", ""),
             ),
+            "linux_installer_url": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_installer_url",
+                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_install_args",
+                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "zabbix": {
             "server_url": runtime_bootstrap_value("zabbix", "server_url", os.getenv("ZABBIX_SERVER", "")),
@@ -62,6 +72,16 @@ def deployment_config() -> dict[str, object]:
                 "install_args",
                 os.getenv("ZABBIX_AGENT_INSTALL_ARGS", ""),
             ),
+            "linux_installer_url": runtime_bootstrap_value(
+                "zabbix",
+                "linux_installer_url",
+                os.getenv("ZABBIX_LINUX_AGENT_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "zabbix",
+                "linux_install_args",
+                os.getenv("ZABBIX_LINUX_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "wazuh": {
             "manager_url": runtime_bootstrap_value("wazuh", "manager_url", os.getenv("WAZUH_MANAGER", "")),
@@ -71,6 +91,16 @@ def deployment_config() -> dict[str, object]:
                 os.getenv("WAZUH_AGENT_INSTALLER_URL", ""),
             ),
             "install_args": runtime_bootstrap_value("wazuh", "install_args", os.getenv("WAZUH_AGENT_INSTALL_ARGS", "")),
+            "linux_installer_url": runtime_bootstrap_value(
+                "wazuh",
+                "linux_installer_url",
+                os.getenv("WAZUH_LINUX_AGENT_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "wazuh",
+                "linux_install_args",
+                os.getenv("WAZUH_LINUX_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "salt": {
             "master_url": runtime_bootstrap_value("salt", "master_url", os.getenv("SALT_MASTER", "")),
@@ -80,6 +110,16 @@ def deployment_config() -> dict[str, object]:
                 os.getenv("SALT_MINION_INSTALLER_URL", ""),
             ),
             "install_args": runtime_bootstrap_value("salt", "install_args", os.getenv("SALT_MINION_INSTALL_ARGS", "")),
+            "linux_installer_url": runtime_bootstrap_value(
+                "salt",
+                "linux_installer_url",
+                os.getenv("SALT_LINUX_MINION_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "salt",
+                "linux_install_args",
+                os.getenv("SALT_LINUX_MINION_INSTALL_ARGS", ""),
+            ),
         },
     }
 
@@ -89,7 +129,7 @@ def integration_status() -> dict[str, object]:
     runtime_config = load_runtime_config()
     identity_missing = [
         name
-        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET")
+        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID")
         if not (os.getenv(name, "").strip() or _runtime_identity_value(name))
     ]
     integrations = [
@@ -235,7 +275,8 @@ def _is_initialized(runtime: dict[str, object]) -> bool:
     init = runtime.get("init")
     if not isinstance(init, dict):
         return False
-    return bool(init.get("runtime_config_written"))
+    status = str(init.get("status") or "").strip().lower()
+    return status in {"configured", "initialized", "ready"}
 
 
 def _integration_state(configured: bool, initialized: bool, fallback: str = "missing_config") -> str:
@@ -323,9 +364,22 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             enrollment = STORE.get_enrollment_by_token(parts[2])
             portal_url = str(enrollment.config.get("portal_url") or deployment_config()["portal_url"])
             return TextResponse(render_windows_bootstrap(portal_url, parts[2]), "text/plain; charset=utf-8")
+        if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "bootstrap.sh":
+            enrollment = STORE.get_enrollment_by_token(parts[2])
+            portal_url = str(enrollment.config.get("portal_url") or deployment_config()["portal_url"])
+            return TextResponse(render_linux_bootstrap(portal_url, parts[2]), "text/x-shellscript; charset=utf-8")
         raise NotFound("route not found")
 
     def _route_post(self, context: TenantContext, parts: list[str]) -> Any:
+        if parts == ["api", "orgs"]:
+            payload = self._read_payload()
+            return {
+                "organization": STORE.create_organization(
+                    context=context,
+                    name=str(payload.get("name") or ""),
+                    org_id=str(payload.get("id") or "").strip() or None,
+                )
+            }
         if parts == ["api", "enrollments"]:
             payload = self._read_payload()
             expires_hours = int(payload.get("expires_hours", 24))
