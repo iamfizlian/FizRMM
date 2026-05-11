@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_COMPOSE_FILE="$ROOT_DIR/docker-compose.app.yml"
 cd "$ROOT_DIR"
 
 usage() {
@@ -34,8 +35,8 @@ pull_if_possible() {
 run_app() {
   require_docker
   pull_if_possible
-  docker compose down --remove-orphans
-  docker compose up --build
+  docker compose -f "$APP_COMPOSE_FILE" down --remove-orphans
+  docker compose -f "$APP_COMPOSE_FILE" up --build
 }
 
 start_app() {
@@ -44,7 +45,7 @@ start_app() {
 
 stop_app() {
   require_docker
-  docker compose down --remove-orphans
+  docker compose -f "$APP_COMPOSE_FILE" down --remove-orphans
 }
 
 case "${1:-start}" in
@@ -60,15 +61,15 @@ case "${1:-start}" in
     ;;
   status|ps)
     require_docker
-    docker compose ps
+    docker compose -f "$APP_COMPOSE_FILE" ps
     ;;
   logs)
     require_docker
-    docker compose logs -f "${@:2}"
+    docker compose -f "$APP_COMPOSE_FILE" logs -f "${@:2}"
     ;;
   reset)
     require_docker
-    docker compose down --volumes --remove-orphans
+    docker compose -f "$APP_COMPOSE_FILE" down --volumes --remove-orphans
     ;;
   integrations)
     require_docker

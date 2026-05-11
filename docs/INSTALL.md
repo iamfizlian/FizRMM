@@ -21,7 +21,7 @@ From the repository root, use one command:
 ./fizrmm
 ```
 
-That command pulls the latest code when possible, stops old Compose containers, rebuilds images, and starts the application.
+That command uses `docker-compose.app.yml`, pulls the latest code when possible, stops old application containers, rebuilds images, and starts the application.
 
 Default services:
 
@@ -129,24 +129,26 @@ Open optional service UIs only when that profile is running:
 - Zabbix: `http://127.0.0.1:8081/`
 - Keycloak: `http://127.0.0.1:8080/`
 
-Then rebuild:
-
-```bash
-COMPOSE_PARALLEL_LIMIT=1 docker compose build --no-cache api portal
-```
-
-Install Docker Engine with Compose, then restart your terminal.
-
 If raw Compose crashes with `fatal error: concurrent map writes` while pulling images, use the Makefile shortcut. It serializes local image builds and starts Compose with serialized pull operations:
 
 Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
 
-### Docker reports `no space left on device` during `make start`
+Install Docker Engine with Compose, then restart your terminal.
+
+Confirm the API is reachable from the host:
+
+Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
+
+```bash
+docker system df
+docker volume ls
+```
 
 Confirm the API is reachable from the host:
 
 ```bash
-make docker-prune
+docker compose build --no-cache api portal
+./fizrmm
 ```
 
 The portal proxies `/api` to the API container. If direct API health works but the browser does not, check portal logs:
@@ -155,10 +157,7 @@ The portal proxies `/api` to the API container. If direct API health works but t
 docker compose logs -f portal
 ```
 
-```bash
-docker system df
-docker volume ls
-```
+### Docker build cannot download packages
 
 Confirm Docker builds have internet access to npm and PyPI, then rebuild:
 

@@ -40,7 +40,7 @@ Restart without pulling code:
 
 ## What Starts By Default
 
-`./fizrmm` starts only the working FizRMM application services:
+`./fizrmm` uses `docker-compose.app.yml` and starts only the working FizRMM application services:
 
 - `postgres`: application database with seeded organizations, assets, scripts, and timeline data.
 - `api`: FizRMM backend at `http://127.0.0.1:8000`.
