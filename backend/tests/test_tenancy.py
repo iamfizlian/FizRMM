@@ -35,6 +35,19 @@ class TenancyTests(unittest.TestCase):
             {"org_acme", "org_globex"},
         )
 
+    def test_platform_admin_can_create_organization(self):
+        organization = self.store.create_organization(
+            self.platform_admin,
+            "New Customer",
+        )
+
+        self.assertEqual(organization.id, "org_new_customer")
+        self.assertIn(organization, self.store.list_organizations(self.platform_admin))
+
+    def test_technician_cannot_create_organization(self):
+        with self.assertRaises(AccessDenied):
+            self.store.create_organization(self.acme_tech, "Blocked Customer")
+
     def test_remote_session_creates_timeline_event(self):
         result = self.store.create_remote_session(
             self.acme_tech,
