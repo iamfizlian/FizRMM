@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from uuid import uuid4
+from urllib.parse import urlencode
+import os
 import re
 from secrets import token_urlsafe
 
@@ -147,10 +149,32 @@ class InMemoryControlPlaneStore:
                 created_at=now,
             )
         )
+        agent_state = next(
+            (
+                health.service_state
+                for health in self.agent_health
+                if health.asset_id == asset.id and health.agent == AgentKind.MESHCENTRAL
+            ),
+            "unknown",
+        )
+        status = "brokered"
+        message = "Remote session request recorded."
+        if engine == "meshcentral" and agent_state.startswith("skipped"):
+            status = "agent_not_installed"
+            message = "MeshCentral is not installed on this endpoint. Configure a Linux MeshCentral installer URL and re-run enrollment."
+        elif engine == "meshcentral" and not os.getenv("MESHCENTRAL_URL", "").strip():
+            status = "integration_not_configured"
+            message = "MeshCentral server URL is not configured, so FizRMM can only record the request."
+        elif engine == "guacamole" and not os.getenv("GUACAMOLE_URL", "").strip():
+            status = "integration_not_configured"
+            message = "Guacamole broker URL is not configured, so FizRMM can only record the request."
+        query = urlencode({"status": status, "message": message, "asset": asset.hostname})
         return {
             "session_id": session_id,
             "engine": engine,
-            "launch_url": f"https://portal.local/remote/{engine}/{session_id}",
+            "status": status,
+            "message": message,
+            "launch_url": f"/remote/{engine}/{session_id}?{query}",
         }
 
     def create_script_run(

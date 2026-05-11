@@ -57,7 +57,34 @@ class TenancyTests(unittest.TestCase):
 
         timeline = self.store.list_timeline(self.acme_tech, "asset-acme-win-01")
         self.assertEqual(result["engine"], "meshcentral")
+        self.assertIn(result["status"], {"brokered", "integration_not_configured"})
+        self.assertTrue(result["launch_url"].startswith("/remote/meshcentral/"))
         self.assertEqual(timeline[0].kind, "remote_session")
+
+
+    def test_remote_session_reports_skipped_meshcentral_agent(self):
+        enrollment = self.store.create_enrollment(
+            self.acme_tech,
+            "org_acme",
+            "Acme HQ",
+            {"portal_url": "http://127.0.0.1:8000"},
+            "2099-01-01T00:00:00+00:00",
+        )
+        claim = self.store.claim_enrollment(enrollment["token"], "fedora-endpoint", "Fedora Linux")
+        self.store.report_enrollment(
+            enrollment["token"],
+            [{"agent": "meshcentral", "status": "skipped_no_installer_url"}],
+        )
+
+        result = self.store.create_remote_session(
+            self.acme_tech,
+            claim["asset_id"],
+            "meshcentral",
+        )
+
+        self.assertEqual(result["status"], "agent_not_installed")
+        self.assertIn("MeshCentral is not installed", result["message"])
+        self.assertIn("status=agent_not_installed", result["launch_url"])
 
     def test_script_run_uses_salt_executor(self):
         result = self.store.create_script_run(

@@ -42,6 +42,11 @@ async function api(path, orgId, role, options = {}) {
 }
 
 function App() {
+  const remoteRoute = parseRemoteRoute(window.location.pathname, window.location.search);
+  if (remoteRoute) {
+    return <RemoteLaunchPage route={remoteRoute} />;
+  }
+
   const [orgId, setOrgId] = useState("org_acme");
   const [role, setRole] = useState("technician");
   const [activeView, setActiveView] = useState("assets");
@@ -162,7 +167,10 @@ function App() {
         body: JSON.stringify({ engine }),
       });
       setLastAction({ type: "Remote session", payload });
-      setNotice(`${engine} session brokered: ${payload.session_id}`);
+      setNotice(payload.message || `${engine} session brokered: ${payload.session_id}`);
+      if (payload.launch_url) {
+        window.open(payload.launch_url, "_blank", "noopener,noreferrer");
+      }
       refreshAssetDetail(selectedAsset.id);
     } catch (error) {
       setNotice(error.message);
@@ -602,6 +610,45 @@ function AccessView({ orgs, role, orgName, orgId, onOrgNameChange, onOrgIdChange
   );
 }
 
+
+function parseRemoteRoute(pathname, search) {
+  const match = pathname.match(/^\/remote\/([^/]+)\/([^/]+)$/);
+  if (!match) return null;
+  const params = new URLSearchParams(search);
+  return {
+    engine: match[1],
+    sessionId: match[2],
+    status: params.get("status") || "requested",
+    message: params.get("message") || "Remote session request recorded.",
+    asset: params.get("asset") || "endpoint",
+  };
+}
+
+function RemoteLaunchPage({ route }) {
+  const isUnavailable = route.status !== "brokered";
+  return (
+    <main className="remote-launch-page">
+      <section className={`remote-launch-card ${isUnavailable ? "warning" : "ready"}`}>
+        <p className="eyebrow">{route.engine} launch broker</p>
+        <h1>{isUnavailable ? "Remote access is not ready yet" : "Remote session requested"}</h1>
+        <p>{route.message}</p>
+        <div className="result-card compact">
+          <ResultRow label="asset" value={route.asset} />
+          <ResultRow label="session" value={route.sessionId} />
+          <ResultRow label="status" value={route.status} />
+        </div>
+        {isUnavailable && (
+          <p className="muted">
+            The endpoint enrolled successfully, but the bootstrap reported skipped agents because installer URLs were not configured.
+            Configure the remote-access integration/installer URL, create a new enrollment, and re-run the endpoint bootstrap.
+          </p>
+        )}
+        <a className="launch-link" href="/">Back to FizRMM portal</a>
+      </section>
+    </main>
+  );
+}
+
 function ActionResult({ action }) {
   if (!action) return null;
   return (
@@ -610,6 +657,11 @@ function ActionResult({ action }) {
       {Object.entries(action.payload).map(([key, value]) => (
         <ResultRow key={key} label={key} value={typeof value === "object" ? JSON.stringify(value) : value} />
       ))}
+      {action.payload.launch_url && (
+        <a className="launch-link" href={action.payload.launch_url} target="_blank" rel="noreferrer">
+          Open launch page
+        </a>
+      )}
     </div>
   );
 }
