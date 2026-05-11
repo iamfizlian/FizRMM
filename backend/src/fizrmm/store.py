@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from uuid import uuid4
+import re
 from secrets import token_urlsafe
 
 from .models import (
@@ -46,6 +47,21 @@ class InMemoryControlPlaneStore:
             for org in self.organizations.values()
             if context.can_access_org(org.id)
         ]
+
+    def create_organization(self, context: TenantContext, name: str, org_id: str | None = None) -> Organization:
+        if not context.platform_admin:
+            raise AccessDenied("only platform admins can create organizations")
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValidationError("organization name is required")
+        normalized_id = org_id.strip() if org_id else f"org_{re.sub(r'[^a-z0-9]+', '_', normalized_name.lower()).strip('_')}"
+        if not normalized_id or not re.fullmatch(r"[a-zA-Z0-9_-]+", normalized_id):
+            raise ValidationError("organization id may only contain letters, numbers, underscores, and hyphens")
+        if normalized_id in self.organizations:
+            raise ValidationError(f"organization already exists: {normalized_id}")
+        organization = Organization(id=normalized_id, name=normalized_name)
+        self.organizations[normalized_id] = organization
+        return organization
 
     def list_assets(self, context: TenantContext) -> list[Asset]:
         return [
@@ -206,9 +222,14 @@ class InMemoryControlPlaneStore:
             "enrollment": enrollment,
             "token": token,
             "bootstrap_url": f"/api/enrollments/{token}/bootstrap.ps1",
+            "linux_bootstrap_url": f"/api/enrollments/{token}/bootstrap.sh",
             "command": (
                 "powershell.exe -ExecutionPolicy Bypass -File .\\fizrmm-bootstrap.ps1 "
                 f"-PortalUrl {config.get('portal_url')} -EnrollmentToken {token}"
+            ),
+            "linux_command": (
+                f"curl -fsSL {config.get('portal_url')}/api/enrollments/{token}/bootstrap.sh "
+                "-o fizrmm-bootstrap.sh && sudo bash ./fizrmm-bootstrap.sh"
             ),
         }
 

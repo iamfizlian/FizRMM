@@ -1,20 +1,12 @@
 # FizRMM Installation Guide
 
-FizRMM runs locally with Docker Compose. The default stack starts the current app plus persistent Postgres:
-
-- `postgres`: development PostgreSQL database seeded from `backend/migrations`
-- `api`: FizRMM backend prototype at `http://127.0.0.1:8000`
-- `portal`: React technician portal at `http://127.0.0.1:5173`
-
-Keycloak, NATS, and OpenSearch are available as optional infrastructure services for later integration work.
-
-This install can issue endpoint enrollment tokens and a Windows bootstrap script. Real remote/monitoring requires configuring MeshCentral, Zabbix, Wazuh, and Salt agent installer settings. See [Endpoint Deployment](ENDPOINT_DEPLOYMENT.md).
+This is the normal install path for the FizRMM application. It starts the portal, API, and PostgreSQL database. It does **not** start the optional third-party integration containers unless you explicitly ask for them.
 
 ## 1. Prerequisites
 
-Install Docker Desktop or Docker Engine with the Compose plugin.
+Install Docker Engine with the Compose plugin.
 
-Check that Docker is available:
+Check Docker:
 
 ```bash
 docker --version
@@ -26,37 +18,81 @@ docker compose version
 From the repository root:
 
 ```bash
-docker compose up --build
+./fizrmm
 ```
 
-When startup is complete, open:
+That command uses `docker-compose.app.yml`, pulls the latest code when possible, stops old application containers, rebuilds images, and starts the application.
 
-- Portal: `http://127.0.0.1:5173/`
-- API health: `http://127.0.0.1:8000/health`
+Default services:
 
-Expected log lines include:
+- `postgres`: FizRMM database.
+- `api`: FizRMM backend.
+- `portal`: FizRMM web UI.
+
+## 3. Open The UI
+
+Local URL:
 
 ```text
-FizRMM API listening on http://0.0.0.0:8000
-Local:   http://localhost:5173/
+http://127.0.0.1:5173/
 ```
 
-## 3. Verify The Install
+API health URL:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+On Oracle Cloud or another VM, either use an SSH tunnel or open TCP `5173` in the cloud security rules and host firewall.
+
+SSH tunnel example from your workstation:
+
+```bash
+ssh -L 5173:127.0.0.1:5173 opc@<ORACLE_PUBLIC_IP>
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5173/
+```
+
+If exposing it publicly, open only the portal port unless you specifically need direct API access:
+
+```bash
+sudo firewall-cmd --permanent --add-port=5173/tcp
+sudo firewall-cmd --reload
+```
+
+## 4. Stop, Update, Restart
+
+Stop the application:
+
+```bash
+./fizrmm stop
+```
+
+Use the same command after GitHub updates are available; it pulls, rebuilds, and restarts the app:
+
+```bash
+./fizrmm
+```
+
+Restart without pulling code:
+
+```bash
+./fizrmm restart
+```
+
+These commands keep Docker volumes such as PostgreSQL data. To delete data, use the reset command below.
+
+## 5. Verify The Install
 
 In another terminal:
 
 ```bash
 curl http://127.0.0.1:8000/health
-```
-
-Expected response:
-
-```json
-{
-  "status": "ok",
-  "service": "fizrmm-api",
-  "store": "postgres"
-}
+docker compose ps
 ```
 
 List assets visible to an Acme technician:
@@ -77,148 +113,80 @@ Expected status:
 HTTP/1.0 403 Forbidden
 ```
 
-Broker a fake MeshCentral session:
+## 6. Optional Integration Containers
+
+The Compose file includes optional containers for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, OpenSearch, and `fizrmm-init`. They are behind the `integrations` profile and are not part of the normal application install.
+
+Only use this if you are developing integration adapters:
 
 ```bash
-curl -X POST \
-  -H 'Content-Type: application/json' \
-  -H 'X-FizRMM-Orgs: org_acme' \
-  -d '{"engine":"meshcentral"}' \
-  http://127.0.0.1:8000/api/assets/asset-acme-win-01/remote-sessions
+./fizrmm integrations
 ```
 
-Expected response includes `session_id`, `engine`, and `launch_url`.
+Open optional service UIs only when that profile is running:
 
-## 4. Stop Or Update
-
-Stop the app:
-
-```bash
-docker compose down
-```
-
-Rebuild after dependency or Dockerfile changes:
-
-```bash
-docker compose build --no-cache
-docker compose up
-```
-
-View service logs:
-
-```bash
-docker compose logs -f api
-docker compose logs -f portal
-```
-
-## 5. Optional Infrastructure
-
-The current UI already uses PostgreSQL through the API. Keycloak, NATS, and OpenSearch are behind the `infra` profile so the normal install stays lighter.
-
-Create a local environment file:
-
-```bash
-cp .env.example .env
-```
-
-Start the infrastructure services:
-
-```bash
-docker compose --profile infra up -d keycloak nats opensearch
-```
-
-Service URLs:
-
-- PostgreSQL: `localhost:5432`
-- Keycloak: `http://127.0.0.1:8080`
-- NATS: `localhost:4222`
-- NATS monitoring: `http://127.0.0.1:8222`
-- OpenSearch: `https://127.0.0.1:9200`
-
-Stop the optional infrastructure services:
-
-```bash
-docker compose stop keycloak nats opensearch
-docker compose rm -f keycloak nats opensearch
-```
-
-## 6. Integrated Lab Stack
-
-The integrated lab stack starts FizRMM plus the backing capability engines together:
-
-```bash
-docker compose --profile full up --build
-```
-
-The `full` profile adds:
-
-- Keycloak for identity.
-- NATS JetStream for workflow/event streams.
-- MeshCentral for remote access.
-- Salt master for endpoint execution.
-- Zabbix server/web with its own PostgreSQL database.
-- Wazuh manager for endpoint inventory/log/security events.
-- OpenSearch for search and retention.
-- `fizrmm-init`, which waits for the backing services and writes `/runtime/fizrmm/integrations.json`.
-
-This is currently a deployment scaffold. The init job writes the runtime contract consumed by `/api/integrations`; the next implementation step is making that init job call each subsystem API to create realms, tokens, groups, templates, ACLs, and index policies.
-
-The Keycloak slice now creates:
-
-- Realm: `fizrmm`
-- Public OIDC client: `fizrmm-portal`
-- Realm roles: `platform-admin`, `technician`
-- Demo admin: `demo-admin` / `demo-admin-password`
-- Demo technician: `demo-tech` / `demo-tech-password`
-
-The API accepts Keycloak Bearer tokens when present and falls back to `X-FizRMM-*` headers for local development paths that have not moved to browser login yet.
+- MeshCentral: `https://127.0.0.1:8443/`
+- Zabbix: `http://127.0.0.1:8081/`
+- Keycloak: `http://127.0.0.1:8080/`
 
 ## 7. Troubleshooting
 
 ### `docker: command not found`
 
-Install Docker Desktop or Docker Engine with Compose, then restart your terminal.
+Install Docker Engine with Compose, then restart your terminal.
 
 ### `Address already in use`
 
-Another process is using `8000` or `5173`.
-
-Stop the process, or change the host port mapping in `docker-compose.yml`:
-
-```yaml
-ports:
-  - "5174:5173"
-```
+Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
 
 ### Portal cannot connect to the API
 
-Confirm the API is reachable from your host:
+Confirm the API is reachable from the host:
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-The portal uses `FIZRMM_API_BASE` from `.env` or defaults to `http://127.0.0.1:8000`.
+The portal proxies `/api` to the API container. If direct API health works but the browser does not, check portal logs:
+
+```bash
+docker compose logs -f portal
+```
 
 ### Docker build cannot download packages
 
-Confirm your host has internet access to npm and PyPI:
+Confirm Docker builds have internet access to npm and PyPI, then rebuild:
 
 ```bash
-npm ping
-python3 -m pip index versions fastapi
+docker compose build --no-cache api portal
+./fizrmm
 ```
 
-Then rebuild:
+### Docker reports `no space left on device`
+
+Remove unused BuildKit cache and dangling images:
 
 ```bash
-docker compose build --no-cache
+make docker-prune
+```
+
+Inspect Docker usage before deleting volumes that may contain data:
+
+```bash
+docker system df
+docker volume ls
 ```
 
 ### Reset everything
 
-This stops containers and removes Compose-created volumes, including the PostgreSQL data volume:
+This stops containers and removes Compose-created volumes, including PostgreSQL data:
 
 ```bash
-docker compose --profile infra down --volumes
+docker compose down --volumes --remove-orphans
+```
+
+Then start fresh:
+
+```bash
+./fizrmm
 ```
