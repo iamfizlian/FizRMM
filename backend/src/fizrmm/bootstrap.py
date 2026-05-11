@@ -164,9 +164,14 @@ install_agent() {{
   local agent="$1"
   local url_expr="$2"
   local args_expr="$3"
-  local installer_url install_args target status
+  local insecure_expr="${{4:-}}"
+  local installer_url install_args insecure_tls curl_flags target status
   installer_url="$(printf '%s' "$CLAIM_RESPONSE" | json_get "$url_expr")"
   install_args="$(printf '%s' "$CLAIM_RESPONSE" | json_get "$args_expr")"
+  insecure_tls="false"
+  if [ -n "$insecure_expr" ]; then
+    insecure_tls="$(printf '%s' "$CLAIM_RESPONSE" | json_get "$insecure_expr")"
+  fi
 
   if [ -z "$installer_url" ]; then
     echo "Skipping $agent because no Linux installer URL was provided by the portal." >&2
@@ -174,7 +179,11 @@ install_agent() {{
   else
     target="/tmp/fizrmm-$agent-installer"
     echo "Downloading $agent from $installer_url" >&2
-    curl -fL "$installer_url" -o "$target"
+    curl_flags="-fL"
+    if [ "$insecure_tls" = "true" ]; then
+      curl_flags="-fkL"
+    fi
+    curl $curl_flags "$installer_url" -o "$target"
     chmod +x "$target"
     if [ -n "$install_args" ]; then
       INSTALLER_PATH="$target" sh -c "$install_args"
@@ -189,7 +198,7 @@ install_agent() {{
 
 AGENT_REPORTS="$(
   python3 -c 'import json,sys; print(json.dumps([json.loads(line) for line in sys.stdin if line.strip()]))' <<EOF
-$(install_agent meshcentral 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_install_args", "")')
+$(install_agent meshcentral 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_install_args", "")' 'str(data.get("config", {{}}).get("meshcentral", {{}}).get("linux_insecure_tls", "false")).lower()')
 $(install_agent zabbix 'data.get("config", {{}}).get("zabbix", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("zabbix", {{}}).get("linux_install_args", "")')
 $(install_agent wazuh 'data.get("config", {{}}).get("wazuh", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("wazuh", {{}}).get("linux_install_args", "")')
 $(install_agent salt 'data.get("config", {{}}).get("salt", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("salt", {{}}).get("linux_install_args", "")')

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse, urlunparse
 
 from .auth import context_from_authorization
 from .bootstrap import render_linux_bootstrap, render_windows_bootstrap
@@ -41,6 +41,57 @@ def public_portal_url(headers: Any, stored_url: object = "") -> str:
     return str(stored_url or request_url or deployment_config()["portal_url"]).rstrip("/")
 
 
+
+def public_url_with_port(base_url: str, port: int, scheme: str = "https") -> str:
+    parsed = urlparse(base_url)
+    if not parsed.hostname:
+        return ""
+    netloc = parsed.hostname
+    if ":" in netloc and not netloc.startswith("["):
+        netloc = f"[{netloc}]"
+    return urlunparse((scheme, f"{netloc}:{port}", "", "", "", "")).rstrip("/")
+
+
+def meshcentral_public_url(portal_url: str) -> str:
+    explicit = os.getenv("MESHCENTRAL_PUBLIC_URL", "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    service_url = os.getenv("MESHCENTRAL_URL", "").strip().rstrip("/")
+    if service_url and not is_local_or_internal_url(service_url):
+        return service_url
+    return public_url_with_port(portal_url, int(os.getenv("MESHCENTRAL_PUBLIC_PORT", "8443")), "https")
+
+
+def meshcentral_installer_defaults(portal_url: str) -> dict[str, str]:
+    public_url = meshcentral_public_url(portal_url)
+    mesh_id = os.getenv("MESHCENTRAL_MESH_ID", "").strip()
+    if not public_url or not mesh_id:
+        return {"linux_installer_url": "", "linux_install_args": "", "linux_insecure_tls": "false", "installer_url": "", "install_args": ""}
+    encoded_mesh_id = quote(mesh_id, safe="")
+    return {
+        "linux_installer_url": f"{public_url}/meshagents?id=6&meshid={encoded_mesh_id}&installflags=0",
+        "linux_install_args": '"$INSTALLER_PATH" -install',
+        "linux_insecure_tls": os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", "true"),
+        "installer_url": f"{public_url}/meshagents?id=4&meshid={encoded_mesh_id}&installflags=0",
+        "install_args": "{INSTALLER_PATH} -fullinstall",
+    }
+
+
+def require_meshcentral_agent_config(config: dict[str, object]) -> None:
+    required = os.getenv("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", "").strip().lower()
+    if required not in {"1", "true", "yes", "on"}:
+        return
+    meshcentral = config.get("meshcentral")
+    if not isinstance(meshcentral, dict):
+        raise ValidationError("MeshCentral deployment config is missing")
+    if str(meshcentral.get("linux_installer_url") or "").strip():
+        return
+    raise ValidationError(
+        "MeshCentral Linux agent installer is required for enrollment. "
+        "Set MESHCENTRAL_MESH_ID after creating a MeshCentral device group, or set "
+        "MESHCENTRAL_LINUX_AGENT_INSTALLER_URL explicitly."
+    )
+
 def default_store() -> InMemoryControlPlaneStore:
     database_url = os.getenv("DATABASE_URL")
     if database_url:
@@ -60,19 +111,37 @@ class TextResponse:
 
 
 def deployment_config() -> dict[str, object]:
+    portal_url = os.getenv("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
+    meshcentral_defaults = meshcentral_installer_defaults(portal_url)
+    meshcentral_url = meshcentral_public_url(portal_url)
     return {
-        "portal_url": os.getenv("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000"),
+        "portal_url": portal_url,
         "meshcentral": {
-            "server_url": runtime_bootstrap_value("meshcentral", "server_url", os.getenv("MESHCENTRAL_URL", "")),
+            "server_url": runtime_bootstrap_value("meshcentral", "server_url", os.getenv("MESHCENTRAL_URL", meshcentral_url)),
             "installer_url": runtime_bootstrap_value(
                 "meshcentral",
                 "installer_url",
-                os.getenv("MESHCENTRAL_AGENT_INSTALLER_URL", ""),
+                os.getenv("MESHCENTRAL_AGENT_INSTALLER_URL", meshcentral_defaults["installer_url"]),
             ),
             "install_args": runtime_bootstrap_value(
                 "meshcentral",
                 "install_args",
-                os.getenv("MESHCENTRAL_AGENT_INSTALL_ARGS", ""),
+                os.getenv("MESHCENTRAL_AGENT_INSTALL_ARGS", meshcentral_defaults["install_args"]),
+            ),
+            "linux_installer_url": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_installer_url",
+                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALLER_URL", meshcentral_defaults["linux_installer_url"]),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_install_args",
+                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS", meshcentral_defaults["linux_install_args"]),
+            ),
+            "linux_insecure_tls": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_insecure_tls",
+                os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", meshcentral_defaults["linux_insecure_tls"]),
             ),
             "linux_installer_url": runtime_bootstrap_value(
                 "meshcentral",
@@ -413,6 +482,13 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             expires_at = datetime.now(UTC) + timedelta(hours=expires_hours)
             config = deployment_config()
             config["portal_url"] = public_portal_url(self.headers, config.get("portal_url"))
+            meshcentral = config.get("meshcentral")
+            if isinstance(meshcentral, dict):
+                defaults = meshcentral_installer_defaults(str(config["portal_url"]))
+                for key, value in defaults.items():
+                    meshcentral[key] = str(meshcentral.get(key) or value)
+                meshcentral["server_url"] = str(meshcentral.get("server_url") or meshcentral_public_url(str(config["portal_url"])))
+            require_meshcentral_agent_config(config)
             return STORE.create_enrollment(
                 context=context,
                 org_id=payload.get("org_id", context.allowed_org_ids[0] if context.allowed_org_ids else ""),
