@@ -1,0 +1,56 @@
+{
+  "name": "FizRMM",
+  "image": "mcr.microsoft.com/devcontainers/universal:2-linux",
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "forwardPorts": [
+    5173,
+    8000,
+    5432,
+    8080,
+    8081,
+    8222,
+    8443,
+    9200
+  ],
+  "portsAttributes": {
+    "5173": {
+      "label": "FizRMM Portal",
+      "onAutoForward": "openBrowser"
+    },
+    "8000": {
+      "label": "FizRMM API"
+    },
+    "5432": {
+      "label": "PostgreSQL"
+    },
+    "8080": {
+      "label": "Keycloak"
+    },
+    "8081": {
+      "label": "Zabbix Web"
+    },
+    "8222": {
+      "label": "NATS Monitoring"
+    },
+    "8443": {
+      "label": "MeshCentral"
+    },
+    "9200": {
+      "label": "OpenSearch"
+    }
+  },
+  "postCreateCommand": "python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && python -m pip install -r backend/requirements.txt && cd frontend && npm ci",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}
