@@ -35,6 +35,19 @@ class TenancyTests(unittest.TestCase):
             {"org_acme", "org_globex"},
         )
 
+    def test_platform_admin_can_create_organization(self):
+        organization = self.store.create_organization(
+            self.platform_admin,
+            "New Customer",
+        )
+
+        self.assertEqual(organization.id, "org_new_customer")
+        self.assertIn(organization, self.store.list_organizations(self.platform_admin))
+
+    def test_technician_cannot_create_organization(self):
+        with self.assertRaises(AccessDenied):
+            self.store.create_organization(self.acme_tech, "Blocked Customer")
+
     def test_remote_session_creates_timeline_event(self):
         result = self.store.create_remote_session(
             self.acme_tech,
@@ -86,7 +99,7 @@ class TenancyTests(unittest.TestCase):
         self.assertEqual(report["status"], "completed")
         self.assertEqual(agents[0].agent, "meshcentral")
 
-    def test_enrollment_token_cannot_be_claimed_twice(self):
+    def test_enrollment_token_claim_is_idempotent_for_retries(self):
         enrollment = self.store.create_enrollment(
             self.acme_tech,
             "org_acme",
@@ -95,10 +108,10 @@ class TenancyTests(unittest.TestCase):
             "2099-01-01T00:00:00+00:00",
         )
 
-        self.store.claim_enrollment(enrollment["token"], "ACME-ONE", "Windows 11 Pro")
+        first_claim = self.store.claim_enrollment(enrollment["token"], "ACME-ONE", "Windows 11 Pro")
+        second_claim = self.store.claim_enrollment(enrollment["token"], "ACME-TWO", "Windows 11 Pro")
 
-        with self.assertRaises(ValidationError):
-            self.store.claim_enrollment(enrollment["token"], "ACME-TWO", "Windows 11 Pro")
+        self.assertEqual(second_claim["asset_id"], first_claim["asset_id"])
 
     def test_expired_enrollment_token_is_rejected(self):
         enrollment = self.store.create_enrollment(

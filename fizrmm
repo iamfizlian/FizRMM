@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_COMPOSE_FILE="$ROOT_DIR/docker-compose.app.yml"
+cd "$ROOT_DIR"
+
+usage() {
+  cat <<'USAGE'
+Usage: ./fizrmm [start|stop|restart|status|logs|reset|integrations]
+
+Default: pull latest code if possible, stop old containers, rebuild, start the app
+USAGE
+}
+
+require_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker is not installed or not on PATH." >&2
+    exit 127
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    echo "Docker Compose plugin is not available." >&2
+    exit 127
+  fi
+}
+
+pull_if_possible() {
+  if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git pull --ff-only
+  else
+    echo "Skipping git pull: git is unavailable or this is not a git checkout."
+  fi
+}
+
+run_app() {
+  require_docker
+  pull_if_possible
+  docker compose -f "$APP_COMPOSE_FILE" down --remove-orphans
+  docker compose -f "$APP_COMPOSE_FILE" up --build
+}
+
+start_app() {
+  run_app
+}
+
+stop_app() {
+  require_docker
+  docker compose -f "$APP_COMPOSE_FILE" down --remove-orphans
+}
+
+case "${1:-start}" in
+  start|up|install|update)
+    run_app
+    ;;
+  stop|down)
+    stop_app
+    ;;
+  restart)
+    stop_app
+    start_app
+    ;;
+  status|ps)
+    require_docker
+    docker compose -f "$APP_COMPOSE_FILE" ps
+    ;;
+  logs)
+    require_docker
+    docker compose -f "$APP_COMPOSE_FILE" logs -f "${@:2}"
+    ;;
+  reset)
+    require_docker
+    docker compose -f "$APP_COMPOSE_FILE" down --volumes --remove-orphans
+    ;;
+  integrations)
+    require_docker
+    COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations build api
+    COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations build portal
+    COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations up --no-build
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
