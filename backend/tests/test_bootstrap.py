@@ -147,5 +147,105 @@ class PublicPortalUrlTests(unittest.TestCase):
         self.assertEqual(portal_url, "http://164.152.27.91:5173")
 
 
+class MeshCentralInstallerDefaultTests(unittest.TestCase):
+    def setUp(self):
+        import os
+        self.previous = {
+            key: os.environ.get(key)
+            for key in (
+                "MESHCENTRAL_MESH_ID",
+                "MESHCENTRAL_PUBLIC_URL",
+                "MESHCENTRAL_PUBLIC_PORT",
+                "MESHCENTRAL_LINUX_INSECURE_TLS",
+                "FIZRMM_PUBLIC_URL",
+                "FIZRMM_INTEGRATIONS_FILE",
+                "FIZRMM_REQUIRE_MESHCENTRAL_AGENT",
+            )
+        }
+        for key in self.previous:
+            os.environ.pop(key, None)
+
+    def tearDown(self):
+        import os
+        for key, value in self.previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_meshcentral_mesh_id_generates_linux_installer_url(self):
+        import os
+        from fizrmm.api import meshcentral_installer_defaults
+
+        os.environ["MESHCENTRAL_MESH_ID"] = "mesh/domain/example id"
+
+        defaults = meshcentral_installer_defaults("http://164.152.27.91:5173")
+
+        self.assertEqual(defaults["mesh_id"], "mesh/domain/example id")
+        self.assertEqual(defaults["linux_install_args"], '"$INSTALLER_PATH" -install')
+        self.assertEqual(defaults["linux_insecure_tls"], "true")
+        self.assertIn("https://164.152.27.91:8443/meshagents?id=6", defaults["linux_installer_url"])
+        self.assertIn("meshid=mesh%2Fdomain%2Fexample%20id", defaults["linux_installer_url"])
+
+    def test_claim_response_fills_meshcentral_defaults_for_existing_enrollment(self):
+        import os
+        import urllib.request
+        import json
+        import threading
+        import time
+
+        from fizrmm.api import make_server
+
+        os.environ["MESHCENTRAL_MESH_ID"] = "mesh/domain/default"
+        store = seed_store()
+        enrollment = store.create_enrollment(
+            TenantContext(user_id="tech", allowed_org_ids=("org_acme",)),
+            "org_acme",
+            "Acme HQ",
+            {"portal_url": "http://127.0.0.1:8000", "meshcentral": {}},
+            "2099-01-01T00:00:00+00:00",
+        )
+        server = make_server("127.0.0.1", 8767, store)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        time.sleep(0.05)
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:8767/api/enrollments/{enrollment['token']}/claim",
+                data=json.dumps({"hostname": "host1", "operating_system": "Linux"}).encode("utf-8"),
+                headers={"Content-Type": "application/json", "Host": "164.152.27.91:5173"},
+                method="POST",
+            )
+            payload = json.loads(urllib.request.urlopen(request, timeout=2).read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        meshcentral = payload["config"]["meshcentral"]
+        self.assertIn("https://164.152.27.91:8443/meshagents?id=6", meshcentral["linux_installer_url"])
+        self.assertEqual(meshcentral["linux_install_args"], '"$INSTALLER_PATH" -install')
+
+    def test_reachable_meshcentral_requires_agent_configuration(self):
+        import json
+        import os
+        import tempfile
+        from pathlib import Path
+
+        from fizrmm.api import require_meshcentral_agent_config
+        from fizrmm.models import ValidationError
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "integrations.json"
+            path.write_text(
+                json.dumps({"integrations": {"meshcentral": {"init": {"service_reachable": True}}}}),
+                encoding="utf-8",
+            )
+            os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(path)
+
+            with self.assertRaisesRegex(ValidationError, "MESHCENTRAL_MESH_ID"):
+                require_meshcentral_agent_config({"meshcentral": {}})
+
+
 if __name__ == "__main__":
     unittest.main()

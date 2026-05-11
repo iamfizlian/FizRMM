@@ -122,12 +122,14 @@ Or run the one-line `linux_command` returned by the API/portal, which already in
 
 Linux-specific installer URLs can be passed to the API container with these environment variables:
 
-- `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` / `MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS`
+- `MESHCENTRAL_MESH_ID` to let FizRMM derive MeshCentral agent URLs from the public MeshCentral endpoint. For the bundled Docker stack, create a MeshCentral device group, copy its `mesh/...` identifier from the MeshCentral **Add Agent** URL, set this value, then create a new enrollment.
+- `MESHCENTRAL_PUBLIC_URL` or `MESHCENTRAL_PUBLIC_PORT` if endpoints should download MeshCentral agents from a different public URL than `https://<portal-host>:8443`.
+- `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` / `MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS` to override the derived MeshCentral Linux installer URL and command entirely.
 - `ZABBIX_LINUX_AGENT_INSTALLER_URL` / `ZABBIX_LINUX_AGENT_INSTALL_ARGS`
 - `WAZUH_LINUX_AGENT_INSTALLER_URL` / `WAZUH_LINUX_AGENT_INSTALL_ARGS`
 - `SALT_LINUX_MINION_INSTALLER_URL` / `SALT_LINUX_MINION_INSTALL_ARGS`
 
-The generic `*_INSTALLER_URL` values are used as fallback if Linux-specific values are empty.
+The Linux bootstrapper only uses Linux-specific URLs. It does not fall back to generic `*_INSTALLER_URL` values because those are often Windows `.exe` installers. If the integration profile has a reachable MeshCentral service but neither `MESHCENTRAL_MESH_ID` nor `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` is set, FizRMM now fails the enrollment claim with a configuration error instead of silently reporting a skipped MeshCentral agent.
 
 ## Network Requirements
 

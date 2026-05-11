@@ -62,24 +62,62 @@ def meshcentral_public_url(portal_url: str) -> str:
     return public_url_with_port(portal_url, int(os.getenv("MESHCENTRAL_PUBLIC_PORT", "8443")), "https")
 
 
-def meshcentral_installer_defaults(portal_url: str) -> dict[str, str]:
+def meshcentral_mesh_id(default: str = "") -> str:
+    return runtime_bootstrap_value("meshcentral", "mesh_id", os.getenv("MESHCENTRAL_MESH_ID", default)).strip()
+
+
+def meshcentral_installer_defaults(portal_url: str, mesh_id: str = "") -> dict[str, str]:
     public_url = meshcentral_public_url(portal_url)
-    mesh_id = os.getenv("MESHCENTRAL_MESH_ID", "").strip()
-    if not public_url or not mesh_id:
-        return {"linux_installer_url": "", "linux_install_args": "", "linux_insecure_tls": "false", "installer_url": "", "install_args": ""}
-    encoded_mesh_id = quote(mesh_id, safe="")
-    return {
-        "linux_installer_url": f"{public_url}/meshagents?id=6&meshid={encoded_mesh_id}&installflags=0",
-        "linux_install_args": '"$INSTALLER_PATH" -install',
-        "linux_insecure_tls": os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", "true"),
-        "installer_url": f"{public_url}/meshagents?id=4&meshid={encoded_mesh_id}&installflags=0",
-        "install_args": "{INSTALLER_PATH} -fullinstall",
+    resolved_mesh_id = (mesh_id or meshcentral_mesh_id()).strip()
+    defaults = {
+        "mesh_id": resolved_mesh_id,
+        "linux_installer_url": "",
+        "linux_install_args": "",
+        "linux_insecure_tls": "false",
+        "installer_url": "",
+        "install_args": "",
     }
+    if not public_url or not resolved_mesh_id:
+        return defaults
+    encoded_mesh_id = quote(resolved_mesh_id, safe="")
+    defaults.update(
+        {
+            "linux_installer_url": f"{public_url}/meshagents?id=6&meshid={encoded_mesh_id}&installflags=0",
+            "linux_install_args": '"$INSTALLER_PATH" -install',
+            "linux_insecure_tls": os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", "true"),
+            "installer_url": f"{public_url}/meshagents?id=4&meshid={encoded_mesh_id}&installflags=0",
+            "install_args": "{INSTALLER_PATH} -fullinstall",
+        }
+    )
+    return defaults
+
+
+def apply_meshcentral_agent_defaults(config: dict[str, object], portal_url: str) -> None:
+    meshcentral = config.get("meshcentral")
+    if not isinstance(meshcentral, dict):
+        return
+    mesh_id = str(meshcentral.get("mesh_id") or meshcentral_mesh_id()).strip()
+    meshcentral["mesh_id"] = mesh_id
+    defaults = meshcentral_installer_defaults(portal_url, mesh_id)
+    for key, value in defaults.items():
+        meshcentral[key] = str(meshcentral.get(key) or value)
+    meshcentral["server_url"] = str(meshcentral.get("server_url") or meshcentral_public_url(portal_url))
+
+
+def meshcentral_agent_required_by_runtime() -> bool:
+    configured = os.getenv("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", "").strip().lower()
+    if configured in {"1", "true", "yes", "on"}:
+        return True
+    if configured in {"0", "false", "no", "off"}:
+        return False
+    runtime = load_runtime_config()
+    integration = runtime.get("integrations", {}).get("meshcentral", {}) if isinstance(runtime.get("integrations"), dict) else {}
+    init_state = integration.get("init", {}) if isinstance(integration, dict) else {}
+    return isinstance(init_state, dict) and init_state.get("service_reachable") is True
 
 
 def require_meshcentral_agent_config(config: dict[str, object]) -> None:
-    required = os.getenv("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", "").strip().lower()
-    if required not in {"1", "true", "yes", "on"}:
+    if not meshcentral_agent_required_by_runtime():
         return
     meshcentral = config.get("meshcentral")
     if not isinstance(meshcentral, dict):
@@ -117,6 +155,7 @@ def deployment_config() -> dict[str, object]:
     return {
         "portal_url": portal_url,
         "meshcentral": {
+            "mesh_id": runtime_bootstrap_value("meshcentral", "mesh_id", os.getenv("MESHCENTRAL_MESH_ID", meshcentral_defaults["mesh_id"])),
             "server_url": runtime_bootstrap_value("meshcentral", "server_url", os.getenv("MESHCENTRAL_URL", meshcentral_url)),
             "installer_url": runtime_bootstrap_value(
                 "meshcentral",
@@ -142,16 +181,6 @@ def deployment_config() -> dict[str, object]:
                 "meshcentral",
                 "linux_insecure_tls",
                 os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", meshcentral_defaults["linux_insecure_tls"]),
-            ),
-            "linux_installer_url": runtime_bootstrap_value(
-                "meshcentral",
-                "linux_installer_url",
-                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALLER_URL", ""),
-            ),
-            "linux_install_args": runtime_bootstrap_value(
-                "meshcentral",
-                "linux_install_args",
-                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS", ""),
             ),
         },
         "zabbix": {
@@ -482,12 +511,7 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             expires_at = datetime.now(UTC) + timedelta(hours=expires_hours)
             config = deployment_config()
             config["portal_url"] = public_portal_url(self.headers, config.get("portal_url"))
-            meshcentral = config.get("meshcentral")
-            if isinstance(meshcentral, dict):
-                defaults = meshcentral_installer_defaults(str(config["portal_url"]))
-                for key, value in defaults.items():
-                    meshcentral[key] = str(meshcentral.get(key) or value)
-                meshcentral["server_url"] = str(meshcentral.get("server_url") or meshcentral_public_url(str(config["portal_url"])))
+            apply_meshcentral_agent_defaults(config, str(config["portal_url"]))
             require_meshcentral_agent_config(config)
             return STORE.create_enrollment(
                 context=context,
@@ -498,11 +522,22 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             )
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "claim":
             payload = self._read_payload()
-            return STORE.claim_enrollment(
+            enrollment = STORE.get_enrollment_by_token(parts[2])
+            config = dict(enrollment.config)
+            meshcentral = config.get("meshcentral")
+            if isinstance(meshcentral, dict):
+                config["meshcentral"] = dict(meshcentral)
+            portal_url = public_portal_url(self.headers, config.get("portal_url"))
+            config["portal_url"] = portal_url
+            apply_meshcentral_agent_defaults(config, portal_url)
+            require_meshcentral_agent_config(config)
+            claim = STORE.claim_enrollment(
                 token=parts[2],
                 hostname=payload.get("hostname", "unknown"),
                 operating_system=payload.get("operating_system", "unknown"),
             )
+            claim["config"] = config
+            return claim
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "report":
             payload = self._read_payload()
             return STORE.report_enrollment(
