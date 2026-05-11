@@ -143,6 +143,16 @@ def deployment_config() -> dict[str, object]:
                 "linux_insecure_tls",
                 os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", meshcentral_defaults["linux_insecure_tls"]),
             ),
+            "linux_installer_url": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_installer_url",
+                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_install_args",
+                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "zabbix": {
             "server_url": runtime_bootstrap_value("zabbix", "server_url", os.getenv("ZABBIX_SERVER", "")),
