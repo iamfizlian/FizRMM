@@ -180,10 +180,10 @@ install_agent() {{
 
 AGENT_REPORTS="$(
   python3 -c 'import json,sys; print(json.dumps([json.loads(line) for line in sys.stdin if line.strip()]))' <<EOF
-$(install_agent meshcentral 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_installer_url") or data.get("config", {{}}).get("meshcentral", {{}}).get("installer_url", "")' 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_install_args") or data.get("config", {{}}).get("meshcentral", {{}}).get("install_args", "")')
-$(install_agent zabbix 'data.get("config", {{}}).get("zabbix", {{}}).get("linux_installer_url") or data.get("config", {{}}).get("zabbix", {{}}).get("installer_url", "")' 'data.get("config", {{}}).get("zabbix", {{}}).get("linux_install_args") or data.get("config", {{}}).get("zabbix", {{}}).get("install_args", "")')
-$(install_agent wazuh 'data.get("config", {{}}).get("wazuh", {{}}).get("linux_installer_url") or data.get("config", {{}}).get("wazuh", {{}}).get("installer_url", "")' 'data.get("config", {{}}).get("wazuh", {{}}).get("linux_install_args") or data.get("config", {{}}).get("wazuh", {{}}).get("install_args", "")')
-$(install_agent salt 'data.get("config", {{}}).get("salt", {{}}).get("linux_installer_url") or data.get("config", {{}}).get("salt", {{}}).get("installer_url", "")' 'data.get("config", {{}}).get("salt", {{}}).get("linux_install_args") or data.get("config", {{}}).get("salt", {{}}).get("install_args", "")')
+$(install_agent meshcentral 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_install_args", "")')
+$(install_agent zabbix 'data.get("config", {{}}).get("zabbix", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("zabbix", {{}}).get("linux_install_args", "")')
+$(install_agent wazuh 'data.get("config", {{}}).get("wazuh", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("wazuh", {{}}).get("linux_install_args", "")')
+$(install_agent salt 'data.get("config", {{}}).get("salt", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("salt", {{}}).get("linux_install_args", "")')
 EOF
 )"
 

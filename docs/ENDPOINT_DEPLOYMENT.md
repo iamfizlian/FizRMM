@@ -117,10 +117,10 @@ Or run the one-line `linux_command` returned by the API/portal, which already in
 1. Verifies it is running as root.
 2. Claims the enrollment token with hostname and Linux OS information.
 3. Downloads configured Linux installer URLs when present.
-4. Falls back to `skipped_no_installer_url` reports when an installer is not configured.
+4. Falls back to `skipped_no_installer_url` reports when a Linux installer is not configured. It deliberately does not fall back to the generic Windows installer URLs, so a Linux bootstrap will not try to download `.exe` installers from the Windows bootstrap config.
 5. Reports MeshCentral/Zabbix/Wazuh/Salt connector status back to FizRMM.
 
-Linux-specific installer overrides can be passed to the API container with these environment variables:
+Linux-specific installer URLs can be passed to the API container with these environment variables:
 
 - `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` / `MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS`
 - `ZABBIX_LINUX_AGENT_INSTALLER_URL` / `ZABBIX_LINUX_AGENT_INSTALL_ARGS`

@@ -34,6 +34,14 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("skipped_no_installer_url", script)
         self.assertIn("linux_installer_url", script)
 
+    def test_linux_bootstrap_does_not_use_windows_installer_fallbacks(self):
+        script = render_linux_bootstrap("http://127.0.0.1:8000", "token-123")
+
+        self.assertIn('get("linux_installer_url", "")', script)
+        self.assertIn('get("linux_install_args", "")', script)
+        self.assertNotIn('get("installer_url", "")', script)
+        self.assertNotIn('get("install_args", "")', script)
+
     def test_windows_bootstrap_still_claims_and_reports(self):
         script = render_windows_bootstrap("http://127.0.0.1:8000", "token-123")
 
