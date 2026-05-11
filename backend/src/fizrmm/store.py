@@ -4,6 +4,7 @@ from uuid import uuid4
 import re
 from secrets import token_urlsafe
 
+from .enrollment_commands import enrollment_bootstrap_payload
 from .models import (
     AccessDenied,
     AgentHealth,
@@ -218,20 +219,7 @@ class InMemoryControlPlaneStore:
             config=config,
         )
         self.enrollments[token] = enrollment
-        return {
-            "enrollment": enrollment,
-            "token": token,
-            "bootstrap_url": f"/api/enrollments/{token}/bootstrap.ps1",
-            "linux_bootstrap_url": f"/api/enrollments/{token}/bootstrap.sh",
-            "command": (
-                "powershell.exe -ExecutionPolicy Bypass -File .\\fizrmm-bootstrap.ps1 "
-                f"-PortalUrl {config.get('portal_url')} -EnrollmentToken {token}"
-            ),
-            "linux_command": (
-                f"curl -fsSL {config.get('portal_url')}/api/enrollments/{token}/bootstrap.sh "
-                "-o fizrmm-bootstrap.sh && sudo bash ./fizrmm-bootstrap.sh"
-            ),
-        }
+        return enrollment_bootstrap_payload(enrollment, token, config)
 
     def get_enrollment_by_token(self, token: str) -> EndpointEnrollment:
         enrollment = self.enrollments.get(token)

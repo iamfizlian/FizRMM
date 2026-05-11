@@ -59,6 +59,8 @@ The response includes:
 
 The portal **Enroll endpoint** view also exposes these values and includes a direct `fizrmm-bootstrap.ps1` download link.
 
+> **Important:** examples that say `paste-the-enrollment-token-here` require the real token string returned by FizRMM. Do not run commands with an angle-bracket token placeholder; Bash treats the leading angle bracket as input redirection and fails before it contacts FizRMM.
+
 Download the bootstrap script. Replace the token value with the exact token returned by the portal/API; do not type angle brackets in a shell command.
 
 ```bash
@@ -66,12 +68,13 @@ TOKEN="paste-the-enrollment-token-here"
 curl -o fizrmm-bootstrap.ps1 "http://127.0.0.1:8000/api/enrollments/${TOKEN}/bootstrap.ps1"
 ```
 
-Run the script on the Windows PC from an elevated PowerShell session:
+Run the script on the Windows PC from an elevated PowerShell session. In PowerShell, set the token variable to the exact token returned by the portal/API; do not include angle brackets.
 
 ```powershell
+$EnrollmentToken = "paste-the-enrollment-token-here"
 powershell.exe -ExecutionPolicy Bypass -File .\fizrmm-bootstrap.ps1 `
   -PortalUrl "http://127.0.0.1:8000" `
-  -EnrollmentToken "<token>"
+  -EnrollmentToken $EnrollmentToken
 ```
 
 The bootstrapper should:
@@ -101,7 +104,7 @@ For a Linux endpoint, create the same enrollment token with `POST /api/enrollmen
 - `linux_bootstrap_url`
 - `linux_command`
 
-Download and run the Linux bootstrap script as root. Replace the token value with the exact token returned by the portal/API; do not type the angle brackets because shells treat `<token>` as input redirection.
+Download and run the Linux bootstrap script as root. Replace the token value with the exact token returned by the portal/API; do not type angle brackets around it because shells treat the leading angle bracket as input redirection.
 
 ```bash
 TOKEN="paste-the-enrollment-token-here"

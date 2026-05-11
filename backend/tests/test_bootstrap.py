@@ -19,7 +19,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(enrollment["bootstrap_url"].endswith("/bootstrap.ps1"))
         self.assertTrue(enrollment["linux_bootstrap_url"].endswith("/bootstrap.sh"))
         self.assertIn("powershell.exe", enrollment["command"])
+        self.assertIn(enrollment["token"], enrollment["command"])
+        self.assertIn(enrollment["token"], enrollment["linux_command"])
         self.assertIn("sudo bash ./fizrmm-bootstrap.sh", enrollment["linux_command"])
+        self.assertNotIn("<token>", enrollment["command"])
+        self.assertNotIn("<token>", enrollment["linux_command"])
 
     def test_linux_bootstrap_claims_reports_and_skips_missing_installers(self):
         script = render_linux_bootstrap("http://127.0.0.1:8000", "token-123")
