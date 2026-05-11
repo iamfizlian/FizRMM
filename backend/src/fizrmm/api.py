@@ -7,14 +7,90 @@ from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse, urlunparse
 
 from .auth import context_from_authorization
-from .bootstrap import render_windows_bootstrap
+from .bootstrap import render_linux_bootstrap, render_windows_bootstrap
 from .integrations.config import load_runtime_config, runtime_bootstrap_value, runtime_service_value
 from .models import AccessDenied, NotFound, TenantContext, ValidationError, to_jsonable
 from .store import InMemoryControlPlaneStore, seed_store
 
+
+def request_base_url(headers: Any) -> str:
+    forwarded_host = str(headers.get("X-Forwarded-Host") or "").split(",", 1)[0].strip()
+    host = forwarded_host or str(headers.get("Host") or "").split(",", 1)[0].strip()
+    if not host:
+        return ""
+    proto = str(headers.get("X-Forwarded-Proto") or "http").split(",", 1)[0].strip() or "http"
+    return f"{proto}://{host}".rstrip("/")
+
+
+def is_local_or_internal_url(value: object) -> bool:
+    parsed = urlparse(str(value or ""))
+    hostname = (parsed.hostname or "").lower()
+    return hostname in {"", "localhost", "127.0.0.1", "0.0.0.0", "api"}
+
+
+def public_portal_url(headers: Any, stored_url: object = "") -> str:
+    explicit = os.getenv("FIZRMM_PUBLIC_URL", "").strip().rstrip("/")
+    if explicit and not is_local_or_internal_url(explicit):
+        return explicit
+    request_url = request_base_url(headers)
+    if request_url and (not stored_url or is_local_or_internal_url(stored_url)):
+        return request_url
+    return str(stored_url or request_url or deployment_config()["portal_url"]).rstrip("/")
+
+
+
+def public_url_with_port(base_url: str, port: int, scheme: str = "https") -> str:
+    parsed = urlparse(base_url)
+    if not parsed.hostname:
+        return ""
+    netloc = parsed.hostname
+    if ":" in netloc and not netloc.startswith("["):
+        netloc = f"[{netloc}]"
+    return urlunparse((scheme, f"{netloc}:{port}", "", "", "", "")).rstrip("/")
+
+
+def meshcentral_public_url(portal_url: str) -> str:
+    explicit = os.getenv("MESHCENTRAL_PUBLIC_URL", "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    service_url = os.getenv("MESHCENTRAL_URL", "").strip().rstrip("/")
+    if service_url and not is_local_or_internal_url(service_url):
+        return service_url
+    return public_url_with_port(portal_url, int(os.getenv("MESHCENTRAL_PUBLIC_PORT", "8443")), "https")
+
+
+def meshcentral_installer_defaults(portal_url: str) -> dict[str, str]:
+    public_url = meshcentral_public_url(portal_url)
+    mesh_id = os.getenv("MESHCENTRAL_MESH_ID", "").strip()
+    if not public_url or not mesh_id:
+        return {"linux_installer_url": "", "linux_install_args": "", "linux_insecure_tls": "false", "installer_url": "", "install_args": ""}
+    encoded_mesh_id = quote(mesh_id, safe="")
+    return {
+        "linux_installer_url": f"{public_url}/meshagents?id=6&meshid={encoded_mesh_id}&installflags=0",
+        "linux_install_args": '"$INSTALLER_PATH" -install',
+        "linux_insecure_tls": os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", "true"),
+        "installer_url": f"{public_url}/meshagents?id=4&meshid={encoded_mesh_id}&installflags=0",
+        "install_args": "{INSTALLER_PATH} -fullinstall",
+    }
+
+
+def require_meshcentral_agent_config(config: dict[str, object]) -> None:
+    required = os.getenv("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", "").strip().lower()
+    if required not in {"1", "true", "yes", "on"}:
+        return
+    meshcentral = config.get("meshcentral")
+    if not isinstance(meshcentral, dict):
+        raise ValidationError("MeshCentral deployment config is missing")
+    if str(meshcentral.get("linux_installer_url") or "").strip():
+        return
+    raise ValidationError(
+        "MeshCentral Linux agent installer is required for enrollment. "
+        "Set MESHCENTRAL_MESH_ID after creating a MeshCentral device group, or set "
+        "MESHCENTRAL_LINUX_AGENT_INSTALLER_URL explicitly."
+    )
 
 def default_store() -> InMemoryControlPlaneStore:
     database_url = os.getenv("DATABASE_URL")
@@ -35,19 +111,37 @@ class TextResponse:
 
 
 def deployment_config() -> dict[str, object]:
+    portal_url = os.getenv("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
+    meshcentral_defaults = meshcentral_installer_defaults(portal_url)
+    meshcentral_url = meshcentral_public_url(portal_url)
     return {
-        "portal_url": os.getenv("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000"),
+        "portal_url": portal_url,
         "meshcentral": {
-            "server_url": runtime_bootstrap_value("meshcentral", "server_url", os.getenv("MESHCENTRAL_URL", "")),
+            "server_url": runtime_bootstrap_value("meshcentral", "server_url", os.getenv("MESHCENTRAL_URL", meshcentral_url)),
             "installer_url": runtime_bootstrap_value(
                 "meshcentral",
                 "installer_url",
-                os.getenv("MESHCENTRAL_AGENT_INSTALLER_URL", ""),
+                os.getenv("MESHCENTRAL_AGENT_INSTALLER_URL", meshcentral_defaults["installer_url"]),
             ),
             "install_args": runtime_bootstrap_value(
                 "meshcentral",
                 "install_args",
-                os.getenv("MESHCENTRAL_AGENT_INSTALL_ARGS", ""),
+                os.getenv("MESHCENTRAL_AGENT_INSTALL_ARGS", meshcentral_defaults["install_args"]),
+            ),
+            "linux_installer_url": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_installer_url",
+                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALLER_URL", meshcentral_defaults["linux_installer_url"]),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_install_args",
+                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS", meshcentral_defaults["linux_install_args"]),
+            ),
+            "linux_insecure_tls": runtime_bootstrap_value(
+                "meshcentral",
+                "linux_insecure_tls",
+                os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", meshcentral_defaults["linux_insecure_tls"]),
             ),
         },
         "zabbix": {
@@ -62,6 +156,16 @@ def deployment_config() -> dict[str, object]:
                 "install_args",
                 os.getenv("ZABBIX_AGENT_INSTALL_ARGS", ""),
             ),
+            "linux_installer_url": runtime_bootstrap_value(
+                "zabbix",
+                "linux_installer_url",
+                os.getenv("ZABBIX_LINUX_AGENT_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "zabbix",
+                "linux_install_args",
+                os.getenv("ZABBIX_LINUX_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "wazuh": {
             "manager_url": runtime_bootstrap_value("wazuh", "manager_url", os.getenv("WAZUH_MANAGER", "")),
@@ -71,6 +175,16 @@ def deployment_config() -> dict[str, object]:
                 os.getenv("WAZUH_AGENT_INSTALLER_URL", ""),
             ),
             "install_args": runtime_bootstrap_value("wazuh", "install_args", os.getenv("WAZUH_AGENT_INSTALL_ARGS", "")),
+            "linux_installer_url": runtime_bootstrap_value(
+                "wazuh",
+                "linux_installer_url",
+                os.getenv("WAZUH_LINUX_AGENT_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "wazuh",
+                "linux_install_args",
+                os.getenv("WAZUH_LINUX_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "salt": {
             "master_url": runtime_bootstrap_value("salt", "master_url", os.getenv("SALT_MASTER", "")),
@@ -80,6 +194,16 @@ def deployment_config() -> dict[str, object]:
                 os.getenv("SALT_MINION_INSTALLER_URL", ""),
             ),
             "install_args": runtime_bootstrap_value("salt", "install_args", os.getenv("SALT_MINION_INSTALL_ARGS", "")),
+            "linux_installer_url": runtime_bootstrap_value(
+                "salt",
+                "linux_installer_url",
+                os.getenv("SALT_LINUX_MINION_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "salt",
+                "linux_install_args",
+                os.getenv("SALT_LINUX_MINION_INSTALL_ARGS", ""),
+            ),
         },
     }
 
@@ -89,7 +213,7 @@ def integration_status() -> dict[str, object]:
     runtime_config = load_runtime_config()
     identity_missing = [
         name
-        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET")
+        for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID")
         if not (os.getenv(name, "").strip() or _runtime_identity_value(name))
     ]
     integrations = [
@@ -235,7 +359,8 @@ def _is_initialized(runtime: dict[str, object]) -> bool:
     init = runtime.get("init")
     if not isinstance(init, dict):
         return False
-    return bool(init.get("runtime_config_written"))
+    status = str(init.get("status") or "").strip().lower()
+    return status in {"configured", "initialized", "ready"}
 
 
 def _integration_state(configured: bool, initialized: bool, fallback: str = "missing_config") -> str:
@@ -321,22 +446,44 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             return integration_status()
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "bootstrap.ps1":
             enrollment = STORE.get_enrollment_by_token(parts[2])
-            portal_url = str(enrollment.config.get("portal_url") or deployment_config()["portal_url"])
+            portal_url = public_portal_url(self.headers, enrollment.config.get("portal_url"))
             return TextResponse(render_windows_bootstrap(portal_url, parts[2]), "text/plain; charset=utf-8")
+        if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "bootstrap.sh":
+            enrollment = STORE.get_enrollment_by_token(parts[2])
+            portal_url = public_portal_url(self.headers, enrollment.config.get("portal_url"))
+            return TextResponse(render_linux_bootstrap(portal_url, parts[2]), "text/x-shellscript; charset=utf-8")
         raise NotFound("route not found")
 
     def _route_post(self, context: TenantContext, parts: list[str]) -> Any:
+        if parts == ["api", "orgs"]:
+            payload = self._read_payload()
+            return {
+                "organization": STORE.create_organization(
+                    context=context,
+                    name=str(payload.get("name") or ""),
+                    org_id=str(payload.get("id") or "").strip() or None,
+                )
+            }
         if parts == ["api", "enrollments"]:
             payload = self._read_payload()
             expires_hours = int(payload.get("expires_hours", 24))
             if expires_hours < 1 or expires_hours > 168:
                 raise ValidationError("expires_hours must be between 1 and 168")
             expires_at = datetime.now(UTC) + timedelta(hours=expires_hours)
+            config = deployment_config()
+            config["portal_url"] = public_portal_url(self.headers, config.get("portal_url"))
+            meshcentral = config.get("meshcentral")
+            if isinstance(meshcentral, dict):
+                defaults = meshcentral_installer_defaults(str(config["portal_url"]))
+                for key, value in defaults.items():
+                    meshcentral[key] = str(meshcentral.get(key) or value)
+                meshcentral["server_url"] = str(meshcentral.get("server_url") or meshcentral_public_url(str(config["portal_url"])))
+            require_meshcentral_agent_config(config)
             return STORE.create_enrollment(
                 context=context,
                 org_id=payload.get("org_id", context.allowed_org_ids[0] if context.allowed_org_ids else ""),
                 site=payload.get("site", "Default"),
-                config=deployment_config(),
+                config=config,
                 expires_at=expires_at.isoformat(),
             )
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "claim":

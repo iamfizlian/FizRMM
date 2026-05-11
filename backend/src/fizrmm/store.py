@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from uuid import uuid4
+from urllib.parse import urlencode
+import os
+import re
 from secrets import token_urlsafe
 
+from .enrollment_commands import enrollment_bootstrap_payload
 from .models import (
     AccessDenied,
     AgentHealth,
@@ -46,6 +50,21 @@ class InMemoryControlPlaneStore:
             for org in self.organizations.values()
             if context.can_access_org(org.id)
         ]
+
+    def create_organization(self, context: TenantContext, name: str, org_id: str | None = None) -> Organization:
+        if not context.platform_admin:
+            raise AccessDenied("only platform admins can create organizations")
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValidationError("organization name is required")
+        normalized_id = org_id.strip() if org_id else f"org_{re.sub(r'[^a-z0-9]+', '_', normalized_name.lower()).strip('_')}"
+        if not normalized_id or not re.fullmatch(r"[a-zA-Z0-9_-]+", normalized_id):
+            raise ValidationError("organization id may only contain letters, numbers, underscores, and hyphens")
+        if normalized_id in self.organizations:
+            raise ValidationError(f"organization already exists: {normalized_id}")
+        organization = Organization(id=normalized_id, name=normalized_name)
+        self.organizations[normalized_id] = organization
+        return organization
 
     def list_assets(self, context: TenantContext) -> list[Asset]:
         return [
@@ -130,10 +149,32 @@ class InMemoryControlPlaneStore:
                 created_at=now,
             )
         )
+        agent_state = next(
+            (
+                health.service_state
+                for health in self.agent_health
+                if health.asset_id == asset.id and health.agent == AgentKind.MESHCENTRAL
+            ),
+            "unknown",
+        )
+        status = "brokered"
+        message = "Remote session request recorded."
+        if engine == "meshcentral" and agent_state.startswith("skipped"):
+            status = "agent_not_installed"
+            message = "MeshCentral is not installed on this endpoint. Configure a Linux MeshCentral installer URL and re-run enrollment."
+        elif engine == "meshcentral" and not os.getenv("MESHCENTRAL_URL", "").strip():
+            status = "integration_not_configured"
+            message = "MeshCentral server URL is not configured, so FizRMM can only record the request."
+        elif engine == "guacamole" and not os.getenv("GUACAMOLE_URL", "").strip():
+            status = "integration_not_configured"
+            message = "Guacamole broker URL is not configured, so FizRMM can only record the request."
+        query = urlencode({"status": status, "message": message, "asset": asset.hostname})
         return {
             "session_id": session_id,
             "engine": engine,
-            "launch_url": f"https://portal.local/remote/{engine}/{session_id}",
+            "status": status,
+            "message": message,
+            "launch_url": f"/remote/{engine}/{session_id}?{query}",
         }
 
     def create_script_run(
@@ -202,15 +243,7 @@ class InMemoryControlPlaneStore:
             config=config,
         )
         self.enrollments[token] = enrollment
-        return {
-            "enrollment": enrollment,
-            "token": token,
-            "bootstrap_url": f"/api/enrollments/{token}/bootstrap.ps1",
-            "command": (
-                "powershell.exe -ExecutionPolicy Bypass -File .\\fizrmm-bootstrap.ps1 "
-                f"-PortalUrl {config.get('portal_url')} -EnrollmentToken {token}"
-            ),
-        }
+        return enrollment_bootstrap_payload(enrollment, token, config)
 
     def get_enrollment_by_token(self, token: str) -> EndpointEnrollment:
         enrollment = self.enrollments.get(token)
@@ -237,7 +270,18 @@ class InMemoryControlPlaneStore:
         if not operating_system.strip():
             raise ValidationError("operating_system is required")
 
-        enrollment = self._active_enrollment(token)
+        enrollment = self.get_enrollment_by_token(token)
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
+        if enrollment.status in {"claimed", "completed"} and enrollment.asset_id:
+            return {
+                "asset_id": enrollment.asset_id,
+                "org_id": enrollment.org_id,
+                "site": enrollment.site,
+                "config": enrollment.config,
+            }
+        if enrollment.status != "active":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
         asset_id = enrollment.asset_id or f"asset-{uuid4()}"
         if asset_id not in self.assets:
             self.assets[asset_id] = Asset(
@@ -283,14 +327,16 @@ class InMemoryControlPlaneStore:
         agents: list[dict[str, object]],
     ) -> dict[str, object]:
         enrollment = self.get_enrollment_by_token(token)
-        if enrollment.status != "claimed":
-            raise ValidationError(f"enrollment token is {enrollment.status}")
-        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
-            raise ValidationError("enrollment token has expired")
-        if enrollment.asset_id is None:
-            raise ValueError("enrollment must be claimed before reporting")
         if not isinstance(agents, list):
             raise ValidationError("agents must be a list")
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
+        if enrollment.status == "completed":
+            return {"asset_id": enrollment.asset_id, "status": enrollment.status, "agents_reported": len(agents)}
+        if enrollment.status != "claimed":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
+        if enrollment.asset_id is None:
+            raise ValueError("enrollment must be claimed before reporting")
         for agent_report in agents:
             if not isinstance(agent_report, dict):
                 raise ValidationError("agent report entries must be objects")
