@@ -1,6 +1,6 @@
 # Endpoint Deployment
 
-The Docker install starts the FizRMM lab stack: portal, API, PostgreSQL, and the backing service containers. The control plane can now issue endpoint enrollment tokens and downloadable Windows PowerShell and Linux shell bootstrap scripts.
+The Docker install starts the FizRMM application: portal, API, and PostgreSQL. The control plane can issue endpoint enrollment tokens and downloadable Windows PowerShell and Linux shell bootstrap scripts. Optional backing-service containers are available separately for adapter development, but endpoint bootstrap generation does not require them.
 
 Real remote access and monitoring still require the FizRMM adapters to finish configuring MeshCentral, Zabbix, Wazuh, and Salt plus OS-specific agent installer URLs. Without those URLs configured, the bootstrappers can claim/report the endpoint but will skip agent installation.
 

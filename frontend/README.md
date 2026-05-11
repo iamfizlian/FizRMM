@@ -2,25 +2,25 @@
 
 The frontend is a Vite React technician portal shell for the current FizRMM prototype.
 
-For full project setup, see [../docs/INSTALL.md](../docs/INSTALL.md). The recommended Docker install/start path is a single Make target from the repository root or this `frontend/` directory:
+For project setup, see [../docs/INSTALL.md](../docs/INSTALL.md). The recommended Docker install/start path is one command from the repository root or this `frontend/` directory:
 
 ```bash
-make start
+./fizrmm
 ```
 
 Stop it with:
 
 ```bash
-make stop
+./fizrmm stop
 ```
 
-After pulling updates from GitHub while Docker is already running, apply them with:
+Run the same command again after updates are available; it pulls, rebuilds, and restarts the app:
 
 ```bash
-make update
+./fizrmm
 ```
 
-The Compose portal service mounts `./frontend` into the container and keeps `node_modules` in the named `frontend_node_modules` volume. This keeps the Docker image small and avoids exporting the dependency tree into the image layer during full-profile builds. The first portal start installs dependencies into that volume with `npm ci`.
+The Compose portal service mounts `./frontend` into the container and keeps `node_modules` in the named `frontend_node_modules` volume. This keeps the Docker image small and avoids exporting the dependency tree into the image layer during Docker builds. The first portal start installs dependencies into that volume with `npm ci`.
 
 ## Install
 
@@ -57,7 +57,7 @@ Use the Docker-backed build if your host does not have npm installed. This works
 make frontend-build
 ```
 
-The frontend Makefile also delegates backend and stack helpers to the repository root, so `make test-backend`, `make start`, `make stop`, `make update`, `make restart`, `make full-build`, and `make full-pull` work from this directory.
+This directory includes a small `./fizrmm` wrapper that runs the root command for you, so you do not need to cd back to the repository root.
 
 Or build directly when npm is available locally:
 

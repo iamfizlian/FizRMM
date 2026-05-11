@@ -1,4 +1,4 @@
-.PHONY: backend test-backend frontend frontend-build install start up docker-up stop docker-down restart update infra full full-build full-pull docker-prune
+.PHONY: backend test-backend frontend frontend-build install start up docker-up stop docker-down restart update integrations integrations-build integrations-pull docker-prune
 
 backend:
 	PYTHONPATH=backend/src python3 -m fizrmm
@@ -13,25 +13,27 @@ frontend-build:
 	docker compose build portal
 	docker compose run --rm --no-deps portal sh -c 'if [ ! -d node_modules/vite ] || [ ! -d node_modules/react ]; then npm ci; fi; npm run build'
 
-install start up docker-up: full
+install start up docker-up:
+	./fizrmm start
 
 stop docker-down:
-	docker compose down --remove-orphans
+	./fizrmm stop
 
-restart update: stop full
+restart:
+	./fizrmm restart
 
-infra:
-	docker compose up -d postgres keycloak nats opensearch
+update:
+	./fizrmm
 
-full-pull:
-	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full pull
+integrations-pull:
+	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations pull
 
-full-build:
-	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build api
-	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full build portal
+integrations-build:
+	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations build api
+	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations build portal
 
-full: full-build
-	COMPOSE_PARALLEL_LIMIT=1 docker compose --profile full up --no-build
+integrations:
+	./fizrmm integrations
 
 docker-prune:
 	docker builder prune -f

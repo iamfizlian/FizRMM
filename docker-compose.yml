@@ -88,6 +88,7 @@ services:
         condition: service_healthy
 
   keycloak:
+    profiles: ["integrations"]
     image: quay.io/keycloak/keycloak:latest
     command: ["start-dev"]
     environment:
@@ -100,6 +101,7 @@ services:
         condition: service_healthy
 
   nats:
+    profiles: ["integrations"]
     image: nats:latest
     command: ["-js", "-m", "8222"]
     ports:
@@ -107,6 +109,7 @@ services:
       - "8222:8222"
 
   opensearch:
+    profiles: ["integrations"]
     image: opensearchproject/opensearch:latest
     environment:
       discovery.type: single-node
@@ -120,6 +123,7 @@ services:
       - opensearch_data:/usr/share/opensearch/data
 
   meshcentral:
+    profiles: ["integrations"]
     image: ghcr.io/ylianst/meshcentral:latest
     environment:
       HOSTNAME: ${MESHCENTRAL_HOSTNAME:-meshcentral}
@@ -131,16 +135,29 @@ services:
       - meshcentral_files:/opt/meshcentral/meshcentral-files
 
   salt-master:
+    profiles: ["integrations"]
     image: saltstack/salt:latest
-    command: ["salt-master", "-l", "info"]
+    command: ["salt-master", "--config-dir=/etc/salt", "--log-level=info"]
     ports:
       - "4505:4505"
       - "4506:4506"
     volumes:
-      - salt_etc:/etc/salt
+      - ./deploy/salt/master:/etc/salt/master:ro
+      - salt_pki:/etc/salt/pki
+      - salt_cache:/var/cache/salt
       - salt_srv:/srv/salt
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import socket; s=socket.create_connection(('127.0.0.1', 4505), 2); s.close()"
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   zabbix-postgres:
+    profiles: ["integrations"]
     image: postgres:18
     environment:
       POSTGRES_DB: ${ZABBIX_POSTGRES_DB:-zabbix}
@@ -155,6 +172,7 @@ services:
       retries: 5
 
   zabbix-server:
+    profiles: ["integrations"]
     image: zabbix/zabbix-server-pgsql:alpine-latest
     environment:
       DB_SERVER_HOST: zabbix-postgres
@@ -168,6 +186,7 @@ services:
         condition: service_healthy
 
   zabbix-web:
+    profiles: ["integrations"]
     image: zabbix/zabbix-web-nginx-pgsql:alpine-latest
     environment:
       ZBX_SERVER_HOST: zabbix-server
@@ -181,6 +200,7 @@ services:
       - zabbix-server
 
   wazuh-manager:
+    profiles: ["integrations"]
     image: wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}
     hostname: wazuh-manager
     ports:
@@ -191,6 +211,7 @@ services:
       - wazuh_manager_data:/var/ossec/data
 
   fizrmm-init:
+    profiles: ["integrations"]
     image: python:3.13-slim
     working_dir: /init
     command: ["python", "/init/init.py"]
@@ -199,6 +220,7 @@ services:
       FIZRMM_INTEGRATIONS_FILE: /runtime/fizrmm/integrations.json
       FIZRMM_INIT_WAIT_TIMEOUT: ${FIZRMM_INIT_WAIT_TIMEOUT:-180}
       FIZRMM_INIT_WAIT_SERVICES: ${FIZRMM_INIT_WAIT_SERVICES:-keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch}
+      FIZRMM_INIT_REQUIRED_SERVICES: ${FIZRMM_INIT_REQUIRED_SERVICES:-keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
       KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://127.0.0.1:8080}
@@ -227,7 +249,8 @@ volumes:
   frontend_node_modules:
   meshcentral_data:
   meshcentral_files:
-  salt_etc:
+  salt_pki:
+  salt_cache:
   salt_srv:
   zabbix_postgres18_data:
   wazuh_manager_data:

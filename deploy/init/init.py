@@ -13,6 +13,7 @@ from keycloak import KeycloakInit
 CONFIG_PATH = Path(os.getenv("FIZRMM_INIT_CONFIG", "/init/config.json"))
 OUTPUT_PATH = Path(os.getenv("FIZRMM_INTEGRATIONS_FILE", "/runtime/fizrmm/integrations.json"))
 WAIT_TIMEOUT_SECONDS = int(os.getenv("FIZRMM_INIT_WAIT_TIMEOUT", "180"))
+DEFAULT_REQUIRED_SERVICES = "keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch"
 
 
 SERVICE_PORTS = {
@@ -29,8 +30,9 @@ SERVICE_PORTS = {
 def main() -> None:
     config = read_json(CONFIG_PATH)
     services = selected_service_ports()
-    wait_for_services(services)
-    mark_services_reachable(config, services)
+    required_services = selected_required_services(services)
+    reached_services = wait_for_services(services, required_services)
+    mark_service_reachability(config, services, reached_services)
     if "keycloak" in services:
         configure_keycloak(config)
     runtime_config = mark_runtime_config_written(config)
@@ -83,6 +85,12 @@ def selected_service_ports() -> dict[str, tuple[str, int]]:
     return {name: SERVICE_PORTS[name] for name in names if name in SERVICE_PORTS}
 
 
+def selected_required_services(services: dict[str, tuple[str, int]]) -> set[str]:
+    requested = os.getenv("FIZRMM_INIT_REQUIRED_SERVICES", DEFAULT_REQUIRED_SERVICES)
+    names = {name.strip() for name in requested.split(",") if name.strip()}
+    return {name for name in names if name in services}
+
+
 def read_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as config_file:
         payload = json.load(config_file)
@@ -91,19 +99,30 @@ def read_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def wait_for_services(services: dict[str, tuple[str, int]]) -> None:
+def wait_for_services(
+    services: dict[str, tuple[str, int]], required_services: set[str] | None = None
+) -> set[str]:
+    if required_services is None:
+        required_services = set(services)
     deadline = time.monotonic() + WAIT_TIMEOUT_SECONDS
     pending = dict(services)
+    reached: set[str] = set()
     while pending and time.monotonic() < deadline:
         for name, (host, port) in list(pending.items()):
             if can_connect(host, port):
                 print(f"{name} is reachable at {host}:{port}")
+                reached.add(name)
                 del pending[name]
         if pending:
             time.sleep(3)
+    missing_required = sorted(name for name in pending if name in required_services)
+    if missing_required:
+        names = ", ".join(missing_required)
+        raise TimeoutError(f"Timed out waiting for required services: {names}")
     if pending:
         names = ", ".join(sorted(pending))
-        raise TimeoutError(f"Timed out waiting for services: {names}")
+        print(f"Optional services did not become reachable before timeout: {names}")
+    return reached
 
 
 def can_connect(host: str, port: int) -> bool:
@@ -114,7 +133,9 @@ def can_connect(host: str, port: int) -> bool:
         return False
 
 
-def mark_services_reachable(config: dict[str, Any], services: dict[str, tuple[str, int]]) -> None:
+def mark_service_reachability(
+    config: dict[str, Any], services: dict[str, tuple[str, int]], reached_services: set[str]
+) -> None:
     service_to_integration = {
         "keycloak": "identity",
         "nats": "nats",
@@ -130,7 +151,7 @@ def mark_services_reachable(config: dict[str, Any], services: dict[str, tuple[st
             continue
         init_state = integration.setdefault("init", {})
         if isinstance(init_state, dict):
-            init_state["service_reachable"] = True
+            init_state["service_reachable"] = service_name in reached_services
 
 
 def mark_runtime_config_written(config: dict[str, Any]) -> dict[str, Any]:
