@@ -19,7 +19,7 @@ docker compose version
 
 ## 2. Start FizRMM
 
-From the repository root:
+From the repository root, use one command:
 
 ```bash
 ./fizrmm
@@ -155,22 +155,25 @@ Open optional service UIs only when that profile is running:
 - Zabbix: `http://127.0.0.1:8081/`
 - Keycloak: `http://127.0.0.1:8080/`
 
-## 7. Troubleshooting
+Install Docker Engine with Compose, then restart your terminal.
 
-### `docker: command not found`
+Confirm the API is reachable from the host:
 
 Install Docker Engine with Compose, then restart your terminal.
 
-### `Address already in use`
+### Docker build cannot download packages
+
+Confirm the API is reachable from the host:
 
 Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
 
-### Portal cannot connect to the API
+### Docker build cannot download packages
 
 Confirm the API is reachable from the host:
 
 ```bash
-curl http://127.0.0.1:8000/health
+docker compose build --no-cache api portal
+./fizrmm
 ```
 
 The portal proxies `/api` to the API container. If direct API health works but the browser does not, check portal logs:
@@ -202,6 +205,8 @@ Inspect Docker usage before deleting volumes that may contain data:
 docker system df
 docker volume ls
 ```
+
+The Compose file mounts PostgreSQL 18 volumes at `/var/lib/postgresql`, which lets the image create its major-version-specific data directory.
 
 ### Reset everything
 
