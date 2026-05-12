@@ -56,7 +56,7 @@ FizRMM now ships bundled service defaults for Keycloak, MeshCentral, Zabbix, Waz
 ./fizrmm integrations
 ```
 
-Those services are available for end-to-end integration work. For endpoint enrollment, MeshCentral still needs a real MeshCentral device-group ID (`MESHCENTRAL_MESH_ID`) or an explicit Linux installer URL before the bootstrap can install the remote agent.
+Those services are available for end-to-end integration work. After the profile is running, open **Integrations** in the portal as **Platform admin** and use **Save and run setup** or **Use deployment defaults + run**. The API writes the shared runtime integration file and runs the deployment setup check from the web request, marking each service initialized when the backing endpoint is reachable from the API container. For endpoint enrollment, MeshCentral still needs a real MeshCentral device-group ID (`MESHCENTRAL_MESH_ID`) or an explicit Linux installer URL before the bootstrap can install the remote agent.
 
 ## Smoke Checks
 

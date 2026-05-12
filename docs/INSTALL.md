@@ -121,15 +121,22 @@ The Compose file includes containers for Keycloak, MeshCentral, Zabbix, Wazuh, S
 ./fizrmm integrations
 ```
 
+Then complete runtime setup from the portal:
+
+1. Open `http://127.0.0.1:5173/` and switch the role selector to **Platform admin**.
+2. Go to **Integrations**.
+3. Use **Use deployment defaults + run** for the bundled stack, or edit the service/bootstrap values and select **Save and run setup**.
+4. The API persists `/runtime/fizrmm/integrations.json` on the shared Compose volume and runs the deployment setup task from the web request. Integrations move from `configured` to `initialized` once their backing service endpoint is reachable from the API container.
+
 Open optional service UIs only when that profile is running:
 
 - MeshCentral: `https://127.0.0.1:8443/`
 - Zabbix: `http://127.0.0.1:8081/`
 - Keycloak: `http://127.0.0.1:8080/`
 
-Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
+Confirm the API is reachable from the host:
 
-### `docker: command not found`
+Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
 
 Install Docker Engine with Compose, then restart your terminal.
 

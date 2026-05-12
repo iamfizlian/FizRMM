@@ -33,6 +33,9 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("/api/enrollments/$ENROLLMENT_TOKEN/report", script)
         self.assertIn("skipped_no_installer_url", script)
         self.assertIn("linux_installer_url", script)
+        self.assertIn("install_zabbix_builtin", script)
+        self.assertIn("install_wazuh_builtin", script)
+        self.assertIn("install_salt_builtin", script)
 
     def test_rendered_linux_bootstrap_runs_against_api(self):
         import os
@@ -44,6 +47,8 @@ class BootstrapTests(unittest.TestCase):
 
         from fizrmm.api import deployment_config, make_server
 
+        previous_builtin = os.environ.get("FIZRMM_INSTALL_BUILTIN_AGENTS")
+        os.environ["FIZRMM_INSTALL_BUILTIN_AGENTS"] = "false"
         store = seed_store()
         config = deployment_config()
         config["portal_url"] = "http://127.0.0.1:8766"
@@ -73,6 +78,10 @@ class BootstrapTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+            if previous_builtin is None:
+                os.environ.pop("FIZRMM_INSTALL_BUILTIN_AGENTS", None)
+            else:
+                os.environ["FIZRMM_INSTALL_BUILTIN_AGENTS"] = previous_builtin
             if "path" in locals():
                 os.unlink(path)
 

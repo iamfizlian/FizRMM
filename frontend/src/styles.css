@@ -704,3 +704,48 @@ button {
 .remote-launch-card.ready {
   border-color: #73b5a6;
 }
+
+.setup-steps {
+  color: #4d6168;
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.setup-steps li {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.integration-setup-form {
+  border-top: 1px solid #dbe3e1;
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 10px;
+}
+
+.integration-setup-form label {
+  color: #60717a;
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.integration-setup-form input {
+  border: 1px solid #cfdad7;
+  border-radius: 6px;
+  color: #1d2d33;
+  padding: 7px 8px;
+}
+
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.setup-actions button {
+  flex: 1 1 150px;
+}

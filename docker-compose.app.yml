@@ -24,6 +24,7 @@ services:
       FIZRMM_HOST: 0.0.0.0
       FIZRMM_PORT: 8000
       FIZRMM_PUBLIC_URL: ${FIZRMM_PUBLIC_URL:-http://127.0.0.1:8000}
+      FIZRMM_INTEGRATIONS_FILE: /runtime/fizrmm/integrations.json
       DATABASE_URL: ${DATABASE_URL:-postgresql://fizrmm_app:fizrmm-app-dev-password@postgres:5432/fizrmm}
       KEYCLOAK_URL: ${KEYCLOAK_URL:-}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-fizrmm}
@@ -58,6 +59,8 @@ services:
       SALT_LINUX_MINION_INSTALL_ARGS: ${SALT_LINUX_MINION_INSTALL_ARGS:-}
     ports:
       - "8000:8000"
+    volumes:
+      - runtime_config:/runtime/fizrmm
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,4 +92,5 @@ services:
 
 volumes:
   postgres18_data:
+  runtime_config:
   frontend_node_modules:

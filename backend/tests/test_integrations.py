@@ -4,7 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fizrmm.api import deployment_config, integration_status
+from fizrmm.api import configure_integration, deployment_config, integration_status
+from fizrmm.models import TenantContext
 
 
 class RuntimeIntegrationConfigTests(unittest.TestCase):
@@ -64,11 +65,98 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
             self.assertEqual(integrations[integration_id]["missing"], [])
         self.assertEqual(integrations["identity"]["service_url"], "http://keycloak:8080")
         self.assertEqual(integrations["zabbix"]["service_url"], "http://zabbix-web:8080/api_jsonrpc.php")
-        self.assertEqual(config["zabbix"]["server_url"], "zabbix-server")
-        self.assertEqual(config["wazuh"]["manager_url"], "wazuh-manager")
-        self.assertEqual(config["salt"]["master_url"], "salt-master")
+        self.assertEqual(config["zabbix"]["server_url"], "127.0.0.1")
+        self.assertEqual(config["wazuh"]["manager_url"], "127.0.0.1")
+        self.assertEqual(config["salt"]["master_url"], "127.0.0.1")
         self.assertEqual(integrations["meshcentral"]["bootstrap_missing"], ["mesh_id or linux_installer_url"])
+        self.assertTrue(integrations["meshcentral"]["setup_required"])
+        self.assertTrue(any("MeshCentral device group" in step for step in integrations["meshcentral"]["setup_steps"]))
+        self.assertTrue(any("Zabbix server" in step for step in integrations["zabbix"]["setup_steps"]))
+        self.assertTrue(any("Wazuh manager" in step for step in integrations["wazuh"]["setup_steps"]))
+        self.assertTrue(any("Salt master" in step for step in integrations["salt"]["setup_steps"]))
         self.assertFalse(status["ready_for_real_endpoints"])
+
+
+    def test_integration_setup_api_persists_runtime_config(self):
+        import urllib.request
+        import threading
+        import time
+
+        from fizrmm.api import make_server
+        from fizrmm.store import seed_store
+
+        with tempfile.TemporaryDirectory() as directory:
+            os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(Path(directory) / "integrations.json")
+            server = make_server("127.0.0.1", 8770, seed_store())
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            time.sleep(0.05)
+
+            try:
+                request = urllib.request.Request(
+                    "http://127.0.0.1:8770/api/integrations/meshcentral/setup",
+                    data=json.dumps({
+                        "service": {"url": "https://mesh.example.test"},
+                        "bootstrap": {"mesh_id": "mesh/domain/customer", "linux_insecure_tls": "false"},
+                    }).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-FizRMM-Role": "platform-admin",
+                        "X-FizRMM-Orgs": "org_acme",
+                    },
+                    method="POST",
+                )
+                payload = json.loads(urllib.request.urlopen(request, timeout=2).read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            config = deployment_config()
+
+        meshcentral = next(item for item in payload["status"]["integrations"] if item["id"] == "meshcentral")
+        self.assertEqual(config["meshcentral"]["mesh_id"], "mesh/domain/customer")
+        self.assertEqual(config["meshcentral"]["server_url"], "https://mesh.example.test")
+        self.assertEqual(meshcentral["bootstrap_missing"], [])
+
+
+    def test_setup_api_can_run_deployment_task_from_portal(self):
+        import socket
+
+        with tempfile.TemporaryDirectory() as directory:
+            os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(Path(directory) / "integrations.json")
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            host, port = listener.getsockname()
+            try:
+                payload = configure_integration(
+                    TenantContext(user_id="admin", allowed_org_ids=["org_acme"], platform_admin=True),
+                    "nats",
+                    {"service": {"url": f"nats://{host}:{port}"}, "run_setup": True},
+                )
+            finally:
+                listener.close()
+
+            status = integration_status()
+
+        integration = payload["integration"]
+        nats = next(item for item in status["integrations"] if item["id"] == "nats")
+        self.assertEqual(integration["init"]["requested_from"], "web_ui")
+        self.assertEqual(integration["init"]["status"], "configured")
+        self.assertTrue(nats["initialized"])
+
+    def test_setup_task_reports_pending_when_service_is_not_reachable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(Path(directory) / "integrations.json")
+            payload = configure_integration(
+                TenantContext(user_id="admin", allowed_org_ids=["org_acme"], platform_admin=True),
+                "nats",
+                {"service": {"url": "nats://127.0.0.1:9"}, "run_setup": True},
+            )
+
+        self.assertEqual(payload["integration"]["init"]["requested_from"], "web_ui")
+        self.assertEqual(payload["integration"]["init"]["status"], "setup_pending")
+        self.assertFalse(payload["integration"]["init"]["service_reachable"])
 
     def test_runtime_config_feeds_deployment_config(self):
         with tempfile.TemporaryDirectory() as directory:

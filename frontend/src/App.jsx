@@ -20,6 +20,16 @@ import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_FIZRMM_API_BASE || "";
 
+const INTEGRATION_SETUP_FIELDS = {
+  identity: { service: ["url", "public_url", "realm", "client_id", "issuer_url", "jwks_url"], bootstrap: [] },
+  meshcentral: { service: ["url", "public_url"], bootstrap: ["server_url", "mesh_id", "linux_installer_url", "linux_install_args", "linux_insecure_tls"] },
+  zabbix: { service: ["url"], bootstrap: ["server_url", "linux_installer_url", "linux_install_args"] },
+  wazuh: { service: ["url"], bootstrap: ["manager_url", "linux_installer_url", "linux_install_args"] },
+  salt: { service: ["api_url", "url"], bootstrap: ["master_url", "linux_installer_url", "linux_install_args"] },
+  opensearch: { service: ["url"], bootstrap: [] },
+  nats: { service: ["url"], bootstrap: [] },
+};
+
 function headers(orgId, role) {
   return {
     "Content-Type": "application/json",
@@ -207,6 +217,22 @@ function App() {
     }
   }
 
+  async function setupIntegration(integrationId, values) {
+    try {
+      const payload = await api(`/api/integrations/${integrationId}/setup`, orgId, role, {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      setIntegrations(payload.status.integrations);
+      setIntegrationReady(payload.status.ready_for_real_endpoints);
+      setNotice(`Saved setup for ${integrationId}`);
+      return payload;
+    } catch (error) {
+      setNotice(error.message);
+      throw error;
+    }
+  }
+
   async function createOrganization(event) {
     event.preventDefault();
     try {
@@ -348,7 +374,7 @@ function App() {
               />
             )}
             {activeView === "integrations" && (
-              <IntegrationsView integrations={integrations} integrationReady={integrationReady} />
+              <IntegrationsView integrations={integrations} integrationReady={integrationReady} role={role} onSetup={setupIntegration} />
             )}
             {activeView === "alerts" && (
               <AlertsView alerts={alerts} />
@@ -474,7 +500,7 @@ function EnrollmentView({ orgId, site, hours, enrollment, onSiteChange, onHoursC
           <ResultRow label="Windows download command" value={`Invoke-WebRequest -Uri "${bootstrapUrl}" -OutFile .\\fizrmm-bootstrap.ps1`} mono />
           <ResultRow label="Windows run command" value={enrollment.command} mono />
           <ResultRow label="Linux run command" value={enrollment.linux_command} mono />
-          <small>Download the generated bootstrap script first, then run it as Administrator on Windows or with sudo/root on Linux. Set MESHCENTRAL_MESH_ID or a Linux MeshCentral installer URL before enrolling endpoints that need remote access; otherwise MeshCentral is reported as skipped.</small>
+          <small>Download the generated bootstrap script first, then run it as Administrator on Windows or with sudo/root on Linux. Set MESHCENTRAL_MESH_ID or a Linux MeshCentral installer URL before enrolling endpoints that need remote access; Zabbix, Wazuh, and Salt use built-in Linux installers when explicit URLs are not provided.</small>
         </div>
       )}
     </div>
@@ -509,28 +535,149 @@ function AutomationView({ selectedAsset, scripts, lastAction, onScript }) {
   );
 }
 
-function IntegrationsView({ integrations, integrationReady }) {
+function IntegrationsView({ integrations, integrationReady, role, onSetup }) {
   return (
     <div className="workflow-panel">
       <div>
         <p className="eyebrow">Integration readiness</p>
         <h2>{integrationReady ? "Ready for real endpoints" : "Subsystem configuration needed"}</h2>
-        <p className="muted">Bundled service defaults are preconfigured; init completion and endpoint bootstrap requirements show what still needs to be finished for real endpoints.</p>
+        <p className="muted">Use these setup forms to save the service URLs and bootstrap values FizRMM needs before enrolling production endpoints.</p>
       </div>
       <div className="integration-grid expanded">
         {integrations.map((integration) => (
-          <div className={`integration-card ${integration.configured ? "configured" : "missing"}`} key={integration.id}>
-            <strong>{integration.name}</strong>
-            <span>{integration.state}</span>
-            <small>{integration.summary}</small>
-            {integration.missing?.length > 0 && <small>Missing service config: {integration.missing.join(", ")}</small>}
-            {integration.bootstrap_missing?.length > 0 && <small>Endpoint bootstrap needs: {integration.bootstrap_missing.join(", ")}</small>}
-          </div>
+          <IntegrationCard
+            integration={integration}
+            key={integration.id}
+            onSetup={onSetup}
+            canConfigure={role === "platform-admin"}
+          />
         ))}
       </div>
     </div>
   );
 }
+
+function setupFields(integration) {
+  return integration.setup_fields || INTEGRATION_SETUP_FIELDS[integration.id] || { service: [], bootstrap: [] };
+}
+
+function setupInitialValues(integration) {
+  const fields = setupFields(integration);
+  const defaults = integration.setup_defaults || { service: {}, bootstrap: {} };
+  return {
+    service: Object.fromEntries(fields.service.map((field) => [field, integration.service?.[field] || defaults.service?.[field] || (field === "url" ? integration.service_url || "" : "")])),
+    bootstrap: Object.fromEntries(fields.bootstrap.map((field) => [field, integration.bootstrap?.[field] || defaults.bootstrap?.[field] || ""])),
+  };
+}
+
+function setupDefaultValues(integration) {
+  const fields = setupFields(integration);
+  const defaults = integration.setup_defaults || { service: {}, bootstrap: {} };
+  return {
+    service: Object.fromEntries(fields.service.map((field) => [field, defaults.service?.[field] || ""])),
+    bootstrap: Object.fromEntries(fields.bootstrap.map((field) => [field, defaults.bootstrap?.[field] || ""])),
+  };
+}
+
+function IntegrationCard({ integration, canConfigure, onSetup }) {
+  const fields = setupFields(integration);
+  const [values, setValues] = useState(() => setupInitialValues(integration));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValues(setupInitialValues(integration));
+  }, [integration]);
+
+  function update(section, field, value) {
+    setValues((current) => ({
+      ...current,
+      [section]: { ...current[section], [field]: value },
+    }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSetup(integration.id, { ...values, run_setup: false });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveAndRun(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSetup(integration.id, { ...values, run_setup: true });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function applyDefaultsAndRun(event) {
+    event.preventDefault();
+    const defaults = setupDefaultValues(integration);
+    setValues(defaults);
+    setSaving(true);
+    try {
+      await onSetup(integration.id, { ...defaults, use_defaults: true, run_setup: true });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className={`integration-card ${integration.configured ? "configured" : "missing"}`}>
+      <strong>{integration.name}</strong>
+      <span>{integration.state}</span>
+      <small>{integration.summary}</small>
+      {integration.missing?.length > 0 && <small>Missing service config: {integration.missing.join(", ")}</small>}
+      {integration.bootstrap_missing?.length > 0 && <small>Endpoint bootstrap needs: {integration.bootstrap_missing.join(", ")}</small>}
+      {integration.init?.message && <small>Setup task: {integration.init.message}</small>}
+      {integration.setup_required && integration.setup_steps?.length > 0 && (
+        <ol className="setup-steps">
+          {integration.setup_steps.map((step) => <li key={step}>{step}</li>)}
+        </ol>
+      )}
+      <form className="integration-setup-form" onSubmit={submit}>
+        {fields.service.map((field) => (
+          <label key={`service-${field}`}>
+            service.{field}
+            <input
+              value={values.service[field] || ""}
+              onChange={(event) => update("service", field, event.target.value)}
+              placeholder={field === "url" ? integration.service_url || "" : field}
+            />
+          </label>
+        ))}
+        {fields.bootstrap.map((field) => (
+          <label key={`bootstrap-${field}`}>
+            bootstrap.{field}
+            <input
+              value={values.bootstrap[field] || ""}
+              onChange={(event) => update("bootstrap", field, event.target.value)}
+              placeholder={field}
+            />
+          </label>
+        ))}
+        <div className="setup-actions">
+          <button type="submit" disabled={!canConfigure || saving}>
+            {saving ? "Saving…" : "Save setup"}
+          </button>
+          <button type="button" disabled={!canConfigure || saving} onClick={saveAndRun}>
+            Save and run setup
+          </button>
+          <button type="button" disabled={!canConfigure || saving} onClick={applyDefaultsAndRun}>
+            Use deployment defaults + run
+          </button>
+        </div>
+        {!canConfigure && <small>Switch to Platform admin role to save and run integration setup.</small>}
+      </form>
+    </div>
+  );
+}
+
 
 function AlertsView({ alerts }) {
   return (

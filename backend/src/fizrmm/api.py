@@ -11,7 +11,8 @@ from urllib.parse import quote, urlparse, urlunparse
 
 from .auth import context_from_authorization
 from .bootstrap import render_linux_bootstrap, render_windows_bootstrap
-from .integrations.config import load_runtime_config, runtime_bootstrap_value, runtime_service_value
+from .integrations.config import load_runtime_config, runtime_bootstrap_value, runtime_service_value, save_runtime_integration
+from .integrations.setup_tasks import run_runtime_setup
 from .models import AccessDenied, NotFound, TenantContext, ValidationError, to_jsonable
 from .store import InMemoryControlPlaneStore, seed_store
 
@@ -53,6 +54,11 @@ def public_url_with_port(base_url: str, port: int, scheme: str = "https") -> str
     if ":" in netloc and not netloc.startswith("["):
         netloc = f"[{netloc}]"
     return urlunparse((scheme, f"{netloc}:{port}", "", "", "", "")).rstrip("/")
+
+
+def public_host(base_url: str) -> str:
+    parsed = urlparse(base_url)
+    return parsed.hostname or ""
 
 
 def meshcentral_public_url(portal_url: str) -> str:
@@ -162,9 +168,56 @@ BUNDLED_BOOTSTRAP_DEFAULTS = {
     "salt_master": "salt-master",
 }
 
+INTEGRATION_SETUP_STEPS = {
+    "identity": [
+        "Run the Keycloak container/profile or point KEYCLOAK_URL at an existing Keycloak instance.",
+        "Create/configure the FizRMM realm and OIDC client, then set OIDC_CLIENT_ID and issuer/JWKS settings if they differ from bundled defaults.",
+    ],
+    "meshcentral": [
+        "Run or connect a MeshCentral server reachable by endpoints; set MESHCENTRAL_PUBLIC_URL when it is not https://<portal-host>:8443.",
+        "Create a MeshCentral device group for the tenant/site and copy its mesh/... identifier into MESHCENTRAL_MESH_ID, or provide MESHCENTRAL_LINUX_AGENT_INSTALLER_URL directly.",
+        "Create new endpoint enrollments after the MeshCentral mesh ID/installer URL is configured so the bootstrap can install the remote-control agent.",
+    ],
+    "zabbix": [
+        "Run or connect Zabbix server/web and make TCP 10051 reachable from enrolled endpoints.",
+        "Confirm ZABBIX_SERVER points to the endpoint-reachable Zabbix server/proxy address; the Linux bootstrap installs/configures zabbix-agent2 when no explicit installer URL is set.",
+        "Configure host auto-registration/templates in Zabbix for newly enrolled endpoints.",
+    ],
+    "wazuh": [
+        "Run or connect a Wazuh manager and make enrollment/agent ports 1514 and 1515 reachable from enrolled endpoints.",
+        "Confirm WAZUH_MANAGER points to the endpoint-reachable Wazuh manager; the Linux bootstrap installs the official wazuh-agent package when no explicit installer URL is set.",
+        "Configure Wazuh enrollment/auth settings for the agent groups you expect FizRMM endpoints to join.",
+    ],
+    "salt": [
+        "Run or connect a Salt master and make ports 4505/4506 reachable from enrolled endpoints.",
+        "Confirm SALT_MASTER points to the endpoint-reachable Salt master; the Linux bootstrap installs/configures salt-minion when no explicit installer URL is set.",
+        "Accept or preseed minion keys for enrolled endpoints on the Salt master.",
+    ],
+    "opensearch": [
+        "Run or connect OpenSearch and set OPENSEARCH_URL when it differs from the bundled service URL.",
+        "Configure index templates/retention and connect Wazuh or log ingestion before treating search as production-ready.",
+    ],
+    "nats": [
+        "Run or connect NATS JetStream and set NATS_URL when it differs from the bundled service URL.",
+        "Create streams/consumers used by automation workers before treating messaging as production-ready.",
+    ],
+}
+
+
+INTEGRATION_SETUP_FIELDS = {
+    "identity": {"service": {"url", "public_url", "realm", "client_id", "issuer_url", "jwks_url"}, "bootstrap": set()},
+    "meshcentral": {"service": {"url", "public_url"}, "bootstrap": {"server_url", "mesh_id", "linux_installer_url", "linux_install_args", "linux_insecure_tls", "installer_url", "install_args"}},
+    "zabbix": {"service": {"url"}, "bootstrap": {"server_url", "linux_installer_url", "linux_install_args", "installer_url", "install_args"}},
+    "wazuh": {"service": {"url"}, "bootstrap": {"manager_url", "linux_installer_url", "linux_install_args", "installer_url", "install_args"}},
+    "salt": {"service": {"api_url", "url"}, "bootstrap": {"master_url", "linux_installer_url", "linux_install_args", "installer_url", "install_args"}},
+    "opensearch": {"service": {"url"}, "bootstrap": set()},
+    "nats": {"service": {"url"}, "bootstrap": set()},
+}
+
 
 def deployment_config() -> dict[str, object]:
     portal_url = env_value("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
+    endpoint_host = public_host(portal_url)
     meshcentral_defaults = meshcentral_installer_defaults(portal_url)
     meshcentral_url = meshcentral_public_url(portal_url)
     return {
@@ -199,7 +252,7 @@ def deployment_config() -> dict[str, object]:
             ),
         },
         "zabbix": {
-            "server_url": runtime_bootstrap_value("zabbix", "server_url", env_value("ZABBIX_SERVER", BUNDLED_BOOTSTRAP_DEFAULTS["zabbix_server"])),
+            "server_url": runtime_bootstrap_value("zabbix", "server_url", env_value("ZABBIX_SERVER", endpoint_host or BUNDLED_BOOTSTRAP_DEFAULTS["zabbix_server"])),
             "installer_url": runtime_bootstrap_value(
                 "zabbix",
                 "installer_url",
@@ -222,7 +275,7 @@ def deployment_config() -> dict[str, object]:
             ),
         },
         "wazuh": {
-            "manager_url": runtime_bootstrap_value("wazuh", "manager_url", env_value("WAZUH_MANAGER", BUNDLED_BOOTSTRAP_DEFAULTS["wazuh_manager"])),
+            "manager_url": runtime_bootstrap_value("wazuh", "manager_url", env_value("WAZUH_MANAGER", endpoint_host or BUNDLED_BOOTSTRAP_DEFAULTS["wazuh_manager"])),
             "installer_url": runtime_bootstrap_value(
                 "wazuh",
                 "installer_url",
@@ -241,7 +294,7 @@ def deployment_config() -> dict[str, object]:
             ),
         },
         "salt": {
-            "master_url": runtime_bootstrap_value("salt", "master_url", env_value("SALT_MASTER", BUNDLED_BOOTSTRAP_DEFAULTS["salt_master"])),
+            "master_url": runtime_bootstrap_value("salt", "master_url", env_value("SALT_MASTER", endpoint_host or BUNDLED_BOOTSTRAP_DEFAULTS["salt_master"])),
             "installer_url": runtime_bootstrap_value(
                 "salt",
                 "installer_url",
@@ -260,6 +313,84 @@ def deployment_config() -> dict[str, object]:
             ),
         },
     }
+
+
+def integration_setup_defaults(integration_id: str, config: dict[str, object]) -> dict[str, dict[str, str]]:
+    portal_url = str(config.get("portal_url") or env_value("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000"))
+    service_url = BUNDLED_SERVICE_URLS.get(integration_id, "")
+    service: dict[str, str] = {}
+    bootstrap: dict[str, str] = {}
+    if integration_id == "identity":
+        service = {
+            "url": BUNDLED_SERVICE_URLS["identity"],
+            "public_url": env_value("KEYCLOAK_PUBLIC_URL", "http://127.0.0.1:8080"),
+            "realm": env_value("KEYCLOAK_REALM", "fizrmm"),
+            "client_id": env_value("OIDC_CLIENT_ID", "fizrmm-portal"),
+            "issuer_url": env_value("KEYCLOAK_ISSUER", "http://127.0.0.1:8080/realms/fizrmm"),
+            "jwks_url": env_value("KEYCLOAK_JWKS_URL", "http://127.0.0.1:8080/realms/fizrmm/protocol/openid-connect/certs"),
+        }
+    elif integration_id == "meshcentral":
+        meshcentral = config.get("meshcentral", {})
+        mesh_values = meshcentral if isinstance(meshcentral, dict) else {}
+        public_url = meshcentral_public_url(portal_url)
+        service = {"url": service_url, "public_url": public_url}
+        bootstrap = {
+            "server_url": str(mesh_values.get("server_url") or public_url),
+            "mesh_id": str(mesh_values.get("mesh_id") or ""),
+            "linux_installer_url": str(mesh_values.get("linux_installer_url") or ""),
+            "linux_install_args": str(mesh_values.get("linux_install_args") or '"$INSTALLER_PATH" -install'),
+            "linux_insecure_tls": str(mesh_values.get("linux_insecure_tls") or "true"),
+        }
+    elif integration_id == "zabbix":
+        zabbix = config.get("zabbix", {})
+        values = zabbix if isinstance(zabbix, dict) else {}
+        service = {"url": service_url}
+        bootstrap = {"server_url": str(values.get("server_url") or public_host(portal_url) or "zabbix-server")}
+    elif integration_id == "wazuh":
+        wazuh = config.get("wazuh", {})
+        values = wazuh if isinstance(wazuh, dict) else {}
+        service = {"url": service_url}
+        bootstrap = {"manager_url": str(values.get("manager_url") or public_host(portal_url) or "wazuh-manager")}
+    elif integration_id == "salt":
+        salt = config.get("salt", {})
+        values = salt if isinstance(salt, dict) else {}
+        service = {"api_url": service_url}
+        bootstrap = {"master_url": str(values.get("master_url") or public_host(portal_url) or "salt-master")}
+    elif integration_id in {"opensearch", "nats"}:
+        service = {"url": service_url}
+    return {"service": service, "bootstrap": bootstrap}
+
+
+def clean_setup_values(values: object, allowed: set[str]) -> dict[str, str]:
+    if not isinstance(values, dict):
+        return {}
+    cleaned: dict[str, str] = {}
+    for key, value in values.items():
+        if key not in allowed:
+            raise ValidationError(f"unsupported integration setup field: {key}")
+        cleaned[key] = str(value or "").strip()
+    return cleaned
+
+
+def configure_integration(context: TenantContext, integration_id: str, payload: dict[str, object]) -> dict[str, object]:
+    if not context.platform_admin:
+        raise AccessDenied("only platform admins can configure integrations")
+    spec = INTEGRATION_SETUP_FIELDS.get(integration_id)
+    if spec is None:
+        raise NotFound(f"integration not found: {integration_id}")
+    if payload.get("use_defaults") is True:
+        defaults = integration_setup_defaults(integration_id, deployment_config())
+        service = clean_setup_values(defaults.get("service", {}), spec["service"])
+        bootstrap = clean_setup_values(defaults.get("bootstrap", {}), spec["bootstrap"])
+    else:
+        service = clean_setup_values(payload.get("service", {}), spec["service"])
+        bootstrap = clean_setup_values(payload.get("bootstrap", {}), spec["bootstrap"])
+    if integration_id == "meshcentral" and service.get("url") and not bootstrap.get("server_url"):
+        bootstrap["server_url"] = service["url"]
+    integration = save_runtime_integration(integration_id, service, bootstrap)
+    if payload.get("run_setup") is True:
+        integration = run_runtime_setup(integration_id)
+    return {"integration": integration, "status": integration_status()}
 
 
 def integration_status() -> dict[str, object]:
@@ -328,12 +459,18 @@ def _identity_integration(missing: list[str]) -> dict[str, object]:
         "initialized": initialized,
         "adapter_implemented": False,
         "service_url": _identity_config_value("KEYCLOAK_URL"),
+        "service": runtime.get("service", {}) if isinstance(runtime.get("service"), dict) else {},
+        "bootstrap": runtime.get("bootstrap", {}) if isinstance(runtime.get("bootstrap"), dict) else {},
         "summary": (
             "Keycloak service defaults are configured for the bundled stack."
             if configured
             else "Technician identity is currently simulated with X-FizRMM-* headers."
         ),
         "missing": missing,
+        "setup_required": not initialized,
+        "setup_steps": INTEGRATION_SETUP_STEPS["identity"] if not initialized else [],
+        "setup_defaults": integration_setup_defaults("identity", deployment_config()),
+        "setup_fields": {"service": sorted(INTEGRATION_SETUP_FIELDS["identity"]["service"]), "bootstrap": sorted(INTEGRATION_SETUP_FIELDS["identity"]["bootstrap"])},
         "init": runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {},
     }
 
@@ -359,6 +496,8 @@ def _agent_integration(
         "initialized": initialized,
         "adapter_implemented": False,
         "service_url": _service_url(integration_id) or _first_config_value(values, required),
+        "service": runtime.get("service", {}) if isinstance(runtime.get("service"), dict) else {},
+        "bootstrap": values,
         "summary": (
             f"{name} service defaults are configured for the bundled stack."
             if configured
@@ -366,6 +505,10 @@ def _agent_integration(
         ),
         "missing": missing,
         "bootstrap_missing": bootstrap_missing,
+        "setup_required": bool(missing or bootstrap_missing or not initialized),
+        "setup_steps": INTEGRATION_SETUP_STEPS.get(integration_id, []) if (missing or bootstrap_missing or not initialized) else [],
+        "setup_defaults": integration_setup_defaults(integration_id, deployment_config()),
+        "setup_fields": {"service": sorted(INTEGRATION_SETUP_FIELDS[integration_id]["service"]), "bootstrap": sorted(INTEGRATION_SETUP_FIELDS[integration_id]["bootstrap"])},
         "init": runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {},
     }
 
@@ -403,8 +546,14 @@ def _runtime_only_integration(integration_id: str, name: str) -> dict[str, objec
         "initialized": initialized,
         "adapter_implemented": False,
         "service_url": service_url,
+        "service": runtime.get("service", {}) if isinstance(runtime.get("service"), dict) else {},
+        "bootstrap": runtime.get("bootstrap", {}) if isinstance(runtime.get("bootstrap"), dict) else {},
         "summary": f"{name} service defaults are {'configured' if configured else 'missing'}.",
         "missing": [] if configured else ["service.url"],
+        "setup_required": not initialized,
+        "setup_steps": INTEGRATION_SETUP_STEPS.get(integration_id, []) if not initialized else [],
+        "setup_defaults": integration_setup_defaults(integration_id, deployment_config()),
+        "setup_fields": {"service": sorted(INTEGRATION_SETUP_FIELDS[integration_id]["service"]), "bootstrap": sorted(INTEGRATION_SETUP_FIELDS[integration_id]["bootstrap"])},
         "init": runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {},
     }
 
@@ -567,6 +716,9 @@ class FizRmmHandler(BaseHTTPRequestHandler):
                     org_id=str(payload.get("id") or "").strip() or None,
                 )
             }
+        if len(parts) == 4 and parts[:2] == ["api", "integrations"] and parts[3] == "setup":
+            payload = self._read_payload()
+            return configure_integration(context, parts[2], payload)
         if parts == ["api", "enrollments"]:
             payload = self._read_payload()
             expires_hours = int(payload.get("expires_hours", 24))

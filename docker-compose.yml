@@ -60,7 +60,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - runtime_config:/runtime/fizrmm:ro
+      - runtime_config:/runtime/fizrmm
     depends_on:
       postgres:
         condition: service_healthy
