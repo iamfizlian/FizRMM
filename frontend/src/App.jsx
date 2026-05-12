@@ -474,7 +474,7 @@ function EnrollmentView({ orgId, site, hours, enrollment, onSiteChange, onHoursC
           <ResultRow label="Windows download command" value={`Invoke-WebRequest -Uri "${bootstrapUrl}" -OutFile .\\fizrmm-bootstrap.ps1`} mono />
           <ResultRow label="Windows run command" value={enrollment.command} mono />
           <ResultRow label="Linux run command" value={enrollment.linux_command} mono />
-          <small>Download the generated bootstrap script first, then run it as Administrator on Windows or with sudo/root on Linux. Set MESHCENTRAL_MESH_ID or a Linux MeshCentral installer URL first; otherwise the bootstrap claim fails before creating an unmanaged asset.</small>
+          <small>Download the generated bootstrap script first, then run it as Administrator on Windows or with sudo/root on Linux. Set MESHCENTRAL_MESH_ID or a Linux MeshCentral installer URL before enrolling endpoints that need remote access; otherwise MeshCentral is reported as skipped.</small>
         </div>
       )}
     </div>

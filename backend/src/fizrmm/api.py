@@ -108,7 +108,7 @@ def apply_meshcentral_agent_defaults(config: dict[str, object], portal_url: str)
 
 
 def meshcentral_agent_required_by_runtime() -> bool:
-    configured = os.getenv("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", "true").strip().lower()
+    configured = os.getenv("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", "false").strip().lower()
     if configured in {"0", "false", "no", "off"}:
         return False
     return True
