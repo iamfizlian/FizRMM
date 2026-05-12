@@ -1,0 +1,17 @@
+# FizRMM optional integration Salt master configuration.
+# Bind explicitly so fizrmm-init and future Salt adapters can reach the master
+# through Docker's service DNS name on ports 4505/4506.
+interface: 0.0.0.0
+publish_port: 4505
+ret_port: 4506
+user: root
+
+# Development defaults only. Production should replace this with proper key approval,
+# eAuth, ACLs, and job-return storage.
+auto_accept: True
+file_roots:
+  base:
+    - /srv/salt
+pillar_roots:
+  base:
+    - /srv/pillar
