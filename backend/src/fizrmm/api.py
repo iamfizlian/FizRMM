@@ -105,15 +105,10 @@ def apply_meshcentral_agent_defaults(config: dict[str, object], portal_url: str)
 
 
 def meshcentral_agent_required_by_runtime() -> bool:
-    configured = os.getenv("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", "").strip().lower()
-    if configured in {"1", "true", "yes", "on"}:
-        return True
+    configured = os.getenv("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", "true").strip().lower()
     if configured in {"0", "false", "no", "off"}:
         return False
-    runtime = load_runtime_config()
-    integration = runtime.get("integrations", {}).get("meshcentral", {}) if isinstance(runtime.get("integrations"), dict) else {}
-    init_state = integration.get("init", {}) if isinstance(integration, dict) else {}
-    return isinstance(init_state, dict) and init_state.get("service_reachable") is True
+    return True
 
 
 def require_meshcentral_agent_config(config: dict[str, object]) -> None:

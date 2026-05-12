@@ -44,6 +44,8 @@ class BootstrapTests(unittest.TestCase):
 
         from fizrmm.api import deployment_config, make_server
 
+        previous_required = os.environ.get("FIZRMM_REQUIRE_MESHCENTRAL_AGENT")
+        os.environ["FIZRMM_REQUIRE_MESHCENTRAL_AGENT"] = "false"
         store = seed_store()
         config = deployment_config()
         config["portal_url"] = "http://127.0.0.1:8766"
@@ -73,6 +75,10 @@ class BootstrapTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+            if previous_required is None:
+                os.environ.pop("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", None)
+            else:
+                os.environ["FIZRMM_REQUIRE_MESHCENTRAL_AGENT"] = previous_required
             if "path" in locals():
                 os.unlink(path)
 
@@ -172,6 +178,47 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+    def test_claim_rejects_missing_meshcentral_by_default_before_creating_asset(self):
+        import json
+        import urllib.error
+        import urllib.request
+        import threading
+        import time
+
+        from fizrmm.api import make_server
+
+        store = seed_store()
+        enrollment = store.create_enrollment(
+            TenantContext(user_id="tech", allowed_org_ids=("org_acme",)),
+            "org_acme",
+            "Acme HQ",
+            {"portal_url": "http://127.0.0.1:8000", "meshcentral": {}},
+            "2099-01-01T00:00:00+00:00",
+        )
+        server = make_server("127.0.0.1", 8768, store)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        time.sleep(0.05)
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:8768/api/enrollments/{enrollment['token']}/claim",
+                data=json.dumps({"hostname": "host1", "operating_system": "Linux"}).encode("utf-8"),
+                headers={"Content-Type": "application/json", "Host": "164.152.27.91:5173"},
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=2)
+            body = error.exception.read().decode("utf-8")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertEqual(error.exception.code, 400)
+        self.assertIn("MESHCENTRAL_MESH_ID", body)
+        self.assertEqual(store.get_enrollment_by_token(enrollment["token"]).status, "active")
 
     def test_meshcentral_mesh_id_generates_linux_installer_url(self):
         import os

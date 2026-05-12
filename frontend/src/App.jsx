@@ -474,7 +474,7 @@ function EnrollmentView({ orgId, site, hours, enrollment, onSiteChange, onHoursC
           <ResultRow label="Windows download command" value={`Invoke-WebRequest -Uri "${bootstrapUrl}" -OutFile .\\fizrmm-bootstrap.ps1`} mono />
           <ResultRow label="Windows run command" value={enrollment.command} mono />
           <ResultRow label="Linux run command" value={enrollment.linux_command} mono />
-          <small>Download the generated bootstrap script first, then run it as Administrator on Windows or with sudo/root on Linux. Set MESHCENTRAL_MESH_ID or a Linux MeshCentral installer URL before enrolling real remote-access endpoints.</small>
+          <small>Download the generated bootstrap script first, then run it as Administrator on Windows or with sudo/root on Linux. Set MESHCENTRAL_MESH_ID or a Linux MeshCentral installer URL first; otherwise the bootstrap claim fails before creating an unmanaged asset.</small>
         </div>
       )}
     </div>
@@ -639,8 +639,8 @@ function RemoteLaunchPage({ route }) {
         </div>
         {isUnavailable && (
           <p className="muted">
-            The endpoint enrolled successfully, but the bootstrap reported skipped agents because installer URLs were not configured.
-            Configure the remote-access integration/installer URL, create a new enrollment, and re-run the endpoint bootstrap.
+            This asset was enrolled before a remote-access agent was installed, or the bootstrap was run with MeshCentral enforcement disabled.
+            Configure MESHCENTRAL_MESH_ID or the remote-access installer URL, create a new enrollment, and re-run the endpoint bootstrap.
           </p>
         )}
         <a className="launch-link" href="/">Back to FizRMM portal</a>

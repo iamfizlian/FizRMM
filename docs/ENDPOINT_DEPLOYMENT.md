@@ -2,7 +2,7 @@
 
 The Docker install starts the FizRMM application: portal, API, and PostgreSQL. The control plane can issue endpoint enrollment tokens and downloadable Windows PowerShell and Linux shell bootstrap scripts. Optional backing-service containers are available separately for adapter development, but endpoint bootstrap generation does not require them.
 
-Real remote access and monitoring still require the FizRMM adapters to finish configuring MeshCentral, Zabbix, Wazuh, and Salt plus OS-specific agent installer URLs. Without those URLs configured, the bootstrappers can claim/report the endpoint but will skip agent installation.
+Real remote access and monitoring still require the FizRMM adapters to finish configuring MeshCentral, Zabbix, Wazuh, and Salt plus OS-specific agent installer URLs. MeshCentral is required by default for real endpoint enrollment: set `MESHCENTRAL_MESH_ID` or `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` before running a bootstrap, otherwise the claim fails with a configuration error instead of creating an asset that cannot be remotely managed. Optional Zabbix, Wazuh, and Salt installers are still reported as skipped when their Linux installer URLs are empty.
 
 To manage a real PC, FizRMM needs an endpoint enrollment flow that installs and registers the agent bundle for that organization/site/device. The planned default endpoint footprint is:
 
@@ -117,8 +117,9 @@ Or run the one-line `linux_command` returned by the API/portal, which already in
 1. Verifies it is running as root.
 2. Claims the enrollment token with hostname and Linux OS information.
 3. Downloads configured Linux installer URLs when present.
-4. Falls back to `skipped_no_installer_url` reports when a Linux installer is not configured. It deliberately does not fall back to the generic Windows installer URLs, so a Linux bootstrap will not try to download `.exe` installers from the Windows bootstrap config.
-5. Reports MeshCentral/Zabbix/Wazuh/Salt connector status back to FizRMM.
+4. Requires a MeshCentral Linux installer URL by default, derived from `MESHCENTRAL_MESH_ID` or supplied explicitly with `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL`, so the bootstrap does not silently create a non-remote-manageable asset.
+5. Falls back to `skipped_no_installer_url` reports for optional Linux installers that are not configured. It deliberately does not fall back to the generic Windows installer URLs, so a Linux bootstrap will not try to download `.exe` installers from the Windows bootstrap config.
+6. Reports MeshCentral/Zabbix/Wazuh/Salt connector status back to FizRMM.
 
 Linux-specific installer URLs can be passed to the API container with these environment variables:
 
@@ -129,7 +130,7 @@ Linux-specific installer URLs can be passed to the API container with these envi
 - `WAZUH_LINUX_AGENT_INSTALLER_URL` / `WAZUH_LINUX_AGENT_INSTALL_ARGS`
 - `SALT_LINUX_MINION_INSTALLER_URL` / `SALT_LINUX_MINION_INSTALL_ARGS`
 
-The Linux bootstrapper only uses Linux-specific URLs. It does not fall back to generic `*_INSTALLER_URL` values because those are often Windows `.exe` installers. If the integration profile has a reachable MeshCentral service but neither `MESHCENTRAL_MESH_ID` nor `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` is set, FizRMM now fails the enrollment claim with a configuration error instead of silently reporting a skipped MeshCentral agent.
+The Linux bootstrapper only uses Linux-specific URLs. It does not fall back to generic `*_INSTALLER_URL` values because those are often Windows `.exe` installers. By default, if neither `MESHCENTRAL_MESH_ID` nor `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` is set, FizRMM fails the enrollment claim with a configuration error instead of silently reporting a skipped MeshCentral agent. For claim/report-only development smoke tests, set `FIZRMM_REQUIRE_MESHCENTRAL_AGENT=false` explicitly.
 
 ## Network Requirements
 
