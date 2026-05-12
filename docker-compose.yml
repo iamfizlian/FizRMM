@@ -8,7 +8,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres18_data:/var/lib/postgresql
       - ./backend/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -33,21 +33,34 @@ services:
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       MESHCENTRAL_URL: ${MESHCENTRAL_URL:-}
+      MESHCENTRAL_PUBLIC_URL: ${MESHCENTRAL_PUBLIC_URL:-}
+      MESHCENTRAL_PUBLIC_PORT: ${MESHCENTRAL_PUBLIC_PORT:-8443}
+      MESHCENTRAL_MESH_ID: ${MESHCENTRAL_MESH_ID:-}
+      MESHCENTRAL_LINUX_INSECURE_TLS: ${MESHCENTRAL_LINUX_INSECURE_TLS:-true}
+      FIZRMM_REQUIRE_MESHCENTRAL_AGENT: ${FIZRMM_REQUIRE_MESHCENTRAL_AGENT:-false}
       MESHCENTRAL_AGENT_INSTALLER_URL: ${MESHCENTRAL_AGENT_INSTALLER_URL:-}
       MESHCENTRAL_AGENT_INSTALL_ARGS: ${MESHCENTRAL_AGENT_INSTALL_ARGS:-}
+      MESHCENTRAL_LINUX_AGENT_INSTALLER_URL: ${MESHCENTRAL_LINUX_AGENT_INSTALLER_URL:-}
+      MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS: ${MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS:-}
       ZABBIX_SERVER: ${ZABBIX_SERVER:-}
       ZABBIX_AGENT_INSTALLER_URL: ${ZABBIX_AGENT_INSTALLER_URL:-}
       ZABBIX_AGENT_INSTALL_ARGS: ${ZABBIX_AGENT_INSTALL_ARGS:-}
+      ZABBIX_LINUX_AGENT_INSTALLER_URL: ${ZABBIX_LINUX_AGENT_INSTALLER_URL:-}
+      ZABBIX_LINUX_AGENT_INSTALL_ARGS: ${ZABBIX_LINUX_AGENT_INSTALL_ARGS:-}
       WAZUH_MANAGER: ${WAZUH_MANAGER:-}
       WAZUH_AGENT_INSTALLER_URL: ${WAZUH_AGENT_INSTALLER_URL:-}
       WAZUH_AGENT_INSTALL_ARGS: ${WAZUH_AGENT_INSTALL_ARGS:-}
+      WAZUH_LINUX_AGENT_INSTALLER_URL: ${WAZUH_LINUX_AGENT_INSTALLER_URL:-}
+      WAZUH_LINUX_AGENT_INSTALL_ARGS: ${WAZUH_LINUX_AGENT_INSTALL_ARGS:-}
       SALT_MASTER: ${SALT_MASTER:-}
       SALT_MINION_INSTALLER_URL: ${SALT_MINION_INSTALLER_URL:-}
       SALT_MINION_INSTALL_ARGS: ${SALT_MINION_INSTALL_ARGS:-}
+      SALT_LINUX_MINION_INSTALLER_URL: ${SALT_LINUX_MINION_INSTALLER_URL:-}
+      SALT_LINUX_MINION_INSTALL_ARGS: ${SALT_LINUX_MINION_INSTALL_ARGS:-}
     ports:
       - "8000:8000"
     volumes:
-      - runtime_config:/runtime/fizrmm:ro
+      - runtime_config:/runtime/fizrmm
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,15 +79,19 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     environment:
-      VITE_FIZRMM_API_BASE: ${FIZRMM_API_BASE:-http://127.0.0.1:8000}
+      VITE_FIZRMM_API_BASE: ${FIZRMM_API_BASE:-}
+      VITE_DEV_PROXY_TARGET: ${FIZRMM_DEV_PROXY_TARGET:-http://api:8000}
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
     depends_on:
       api:
         condition: service_healthy
 
   keycloak:
-    profiles: ["infra", "full"]
+    profiles: ["integrations"]
     image: quay.io/keycloak/keycloak:latest
     command: ["start-dev"]
     environment:
@@ -87,7 +104,7 @@ services:
         condition: service_healthy
 
   nats:
-    profiles: ["infra", "full"]
+    profiles: ["integrations"]
     image: nats:latest
     command: ["-js", "-m", "8222"]
     ports:
@@ -95,7 +112,7 @@ services:
       - "8222:8222"
 
   opensearch:
-    profiles: ["infra", "full"]
+    profiles: ["integrations"]
     image: opensearchproject/opensearch:latest
     environment:
       discovery.type: single-node
@@ -109,7 +126,7 @@ services:
       - opensearch_data:/usr/share/opensearch/data
 
   meshcentral:
-    profiles: ["full"]
+    profiles: ["integrations"]
     image: ghcr.io/ylianst/meshcentral:latest
     environment:
       HOSTNAME: ${MESHCENTRAL_HOSTNAME:-meshcentral}
@@ -121,25 +138,36 @@ services:
       - meshcentral_files:/opt/meshcentral/meshcentral-files
 
   salt-master:
-    profiles: ["full"]
+    profiles: ["integrations"]
     image: saltstack/salt:latest
-    command: ["salt-master", "-l", "info"]
+    command: ["salt-master", "--config-dir=/etc/salt", "--log-level=info"]
     ports:
       - "4505:4505"
       - "4506:4506"
     volumes:
-      - salt_etc:/etc/salt
+      - ./deploy/salt/master:/etc/salt/master:ro
+      - salt_pki:/etc/salt/pki
+      - salt_cache:/var/cache/salt
       - salt_srv:/srv/salt
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import socket; s=socket.create_connection(('127.0.0.1', 4505), 2); s.close()"
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   zabbix-postgres:
-    profiles: ["full"]
+    profiles: ["integrations"]
     image: postgres:18
     environment:
       POSTGRES_DB: ${ZABBIX_POSTGRES_DB:-zabbix}
       POSTGRES_USER: ${ZABBIX_POSTGRES_USER:-zabbix}
       POSTGRES_PASSWORD: ${ZABBIX_POSTGRES_PASSWORD:-zabbix-dev-password}
     volumes:
-      - zabbix_postgres_data:/var/lib/postgresql/data
+      - zabbix_postgres18_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -147,7 +175,7 @@ services:
       retries: 5
 
   zabbix-server:
-    profiles: ["full"]
+    profiles: ["integrations"]
     image: zabbix/zabbix-server-pgsql:alpine-latest
     environment:
       DB_SERVER_HOST: zabbix-postgres
@@ -161,7 +189,7 @@ services:
         condition: service_healthy
 
   zabbix-web:
-    profiles: ["full"]
+    profiles: ["integrations"]
     image: zabbix/zabbix-web-nginx-pgsql:alpine-latest
     environment:
       ZBX_SERVER_HOST: zabbix-server
@@ -175,8 +203,8 @@ services:
       - zabbix-server
 
   wazuh-manager:
-    profiles: ["full"]
-    image: wazuh/wazuh-manager:latest
+    profiles: ["integrations"]
+    image: wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}
     hostname: wazuh-manager
     ports:
       - "1514:1514"
@@ -186,7 +214,7 @@ services:
       - wazuh_manager_data:/var/ossec/data
 
   fizrmm-init:
-    profiles: ["full"]
+    profiles: ["integrations"]
     image: python:3.13-slim
     working_dir: /init
     command: ["python", "/init/init.py"]
@@ -195,6 +223,7 @@ services:
       FIZRMM_INTEGRATIONS_FILE: /runtime/fizrmm/integrations.json
       FIZRMM_INIT_WAIT_TIMEOUT: ${FIZRMM_INIT_WAIT_TIMEOUT:-180}
       FIZRMM_INIT_WAIT_SERVICES: ${FIZRMM_INIT_WAIT_SERVICES:-keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch}
+      FIZRMM_INIT_REQUIRED_SERVICES: ${FIZRMM_INIT_REQUIRED_SERVICES:-keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
       KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://127.0.0.1:8080}
@@ -217,12 +246,14 @@ services:
       - opensearch
 
 volumes:
-  postgres_data:
+  postgres18_data:
   opensearch_data:
   runtime_config:
+  frontend_node_modules:
   meshcentral_data:
   meshcentral_files:
-  salt_etc:
+  salt_pki:
+  salt_cache:
   salt_srv:
-  zabbix_postgres_data:
+  zabbix_postgres18_data:
   wazuh_manager_data:
