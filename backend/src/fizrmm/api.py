@@ -220,16 +220,6 @@ def deployment_config() -> dict[str, object]:
                 "linux_install_args",
                 env_value("ZABBIX_LINUX_AGENT_INSTALL_ARGS"),
             ),
-            "linux_installer_url": runtime_bootstrap_value(
-                "zabbix",
-                "linux_installer_url",
-                os.getenv("ZABBIX_LINUX_AGENT_INSTALLER_URL", ""),
-            ),
-            "linux_install_args": runtime_bootstrap_value(
-                "zabbix",
-                "linux_install_args",
-                os.getenv("ZABBIX_LINUX_AGENT_INSTALL_ARGS", ""),
-            ),
         },
         "wazuh": {
             "manager_url": runtime_bootstrap_value("wazuh", "manager_url", env_value("WAZUH_MANAGER", BUNDLED_BOOTSTRAP_DEFAULTS["wazuh_manager"])),
@@ -586,7 +576,6 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             config = deployment_config()
             config["portal_url"] = public_portal_url(self.headers, config.get("portal_url"))
             apply_meshcentral_agent_defaults(config, str(config["portal_url"]))
-            require_meshcentral_agent_config(config)
             return STORE.create_enrollment(
                 context=context,
                 org_id=payload.get("org_id", context.allowed_org_ids[0] if context.allowed_org_ids else ""),

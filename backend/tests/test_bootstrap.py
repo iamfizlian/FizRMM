@@ -180,6 +180,39 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
                 os.environ[key] = value
 
 
+    def test_create_enrollment_succeeds_without_meshcentral_installer(self):
+        import json
+        import os
+        import threading
+        import time
+        import urllib.request
+
+        from fizrmm.api import make_server
+
+        for key in ("MESHCENTRAL_MESH_ID", "MESHCENTRAL_LINUX_AGENT_INSTALLER_URL"):
+            os.environ.pop(key, None)
+        store = seed_store()
+        server = make_server("127.0.0.1", 8769, store)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        time.sleep(0.05)
+
+        try:
+            request = urllib.request.Request(
+                "http://127.0.0.1:8769/api/enrollments",
+                data=json.dumps({"org_id": "org_acme", "site": "Acme HQ", "expires_hours": 24}).encode("utf-8"),
+                headers={"Content-Type": "application/json", "Host": "164.152.27.91:5173"},
+                method="POST",
+            )
+            payload = json.loads(urllib.request.urlopen(request, timeout=2).read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertIn("token", payload)
+        self.assertTrue(payload["linux_bootstrap_url"].endswith("/bootstrap.sh"))
+        self.assertIn("sudo bash ./fizrmm-bootstrap.sh", payload["linux_command"])
+
     def test_claim_rejects_missing_meshcentral_by_default_before_creating_asset(self):
         import json
         import urllib.error

@@ -127,9 +127,9 @@ Open optional service UIs only when that profile is running:
 - Zabbix: `http://127.0.0.1:8081/`
 - Keycloak: `http://127.0.0.1:8080/`
 
-Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
+Confirm the API is reachable from the host:
 
-### `docker: command not found`
+Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
 
 Install Docker Engine with Compose, then restart your terminal.
 
