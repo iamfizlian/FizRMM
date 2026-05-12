@@ -44,8 +44,6 @@ class BootstrapTests(unittest.TestCase):
 
         from fizrmm.api import deployment_config, make_server
 
-        previous_required = os.environ.get("FIZRMM_REQUIRE_MESHCENTRAL_AGENT")
-        os.environ["FIZRMM_REQUIRE_MESHCENTRAL_AGENT"] = "false"
         store = seed_store()
         config = deployment_config()
         config["portal_url"] = "http://127.0.0.1:8766"
@@ -75,10 +73,6 @@ class BootstrapTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
-            if previous_required is None:
-                os.environ.pop("FIZRMM_REQUIRE_MESHCENTRAL_AGENT", None)
-            else:
-                os.environ["FIZRMM_REQUIRE_MESHCENTRAL_AGENT"] = previous_required
             if "path" in locals():
                 os.unlink(path)
 
@@ -179,7 +173,6 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
             else:
                 os.environ[key] = value
 
-
     def test_create_enrollment_succeeds_without_meshcentral_installer(self):
         import json
         import os
@@ -213,9 +206,8 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
         self.assertTrue(payload["linux_bootstrap_url"].endswith("/bootstrap.sh"))
         self.assertIn("sudo bash ./fizrmm-bootstrap.sh", payload["linux_command"])
 
-    def test_claim_rejects_missing_meshcentral_by_default_before_creating_asset(self):
+    def test_claim_skips_missing_meshcentral_by_default(self):
         import json
-        import urllib.error
         import urllib.request
         import threading
         import time
@@ -242,16 +234,13 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
                 headers={"Content-Type": "application/json", "Host": "164.152.27.91:5173"},
                 method="POST",
             )
-            with self.assertRaises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=2)
-            body = error.exception.read().decode("utf-8")
+            payload = json.loads(urllib.request.urlopen(request, timeout=2).read().decode("utf-8"))
         finally:
             server.shutdown()
             server.server_close()
 
-        self.assertEqual(error.exception.code, 400)
-        self.assertIn("MESHCENTRAL_MESH_ID", body)
-        self.assertEqual(store.get_enrollment_by_token(enrollment["token"]).status, "active")
+        self.assertIn("asset_id", payload)
+        self.assertEqual(store.get_enrollment_by_token(enrollment["token"]).status, "claimed")
 
     def test_meshcentral_mesh_id_generates_linux_installer_url(self):
         import os
@@ -306,7 +295,7 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
         self.assertIn("https://164.152.27.91:8443/meshagents?id=6", meshcentral["linux_installer_url"])
         self.assertEqual(meshcentral["linux_install_args"], '"$INSTALLER_PATH" -install')
 
-    def test_reachable_meshcentral_requires_agent_configuration(self):
+    def test_explicit_meshcentral_requirement_rejects_missing_agent_configuration(self):
         import json
         import os
         import tempfile
@@ -315,6 +304,7 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
         from fizrmm.api import require_meshcentral_agent_config
         from fizrmm.models import ValidationError
 
+        os.environ["FIZRMM_REQUIRE_MESHCENTRAL_AGENT"] = "true"
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "integrations.json"
             path.write_text(
