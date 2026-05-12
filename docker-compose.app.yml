@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fizrmm}
+      POSTGRES_USER: ${POSTGRES_USER:-fizrmm_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fizrmm-admin-dev-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres18_data:/var/lib/postgresql
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      FIZRMM_HOST: 0.0.0.0
+      FIZRMM_PORT: 8000
+      FIZRMM_PUBLIC_URL: ${FIZRMM_PUBLIC_URL:-http://127.0.0.1:8000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://fizrmm_app:fizrmm-app-dev-password@postgres:5432/fizrmm}
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-fizrmm}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-}
+      KEYCLOAK_JWKS_URL: ${KEYCLOAK_JWKS_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      MESHCENTRAL_URL: ${MESHCENTRAL_URL:-}
+      MESHCENTRAL_PUBLIC_URL: ${MESHCENTRAL_PUBLIC_URL:-}
+      MESHCENTRAL_PUBLIC_PORT: ${MESHCENTRAL_PUBLIC_PORT:-8443}
+      MESHCENTRAL_MESH_ID: ${MESHCENTRAL_MESH_ID:-}
+      MESHCENTRAL_LINUX_INSECURE_TLS: ${MESHCENTRAL_LINUX_INSECURE_TLS:-true}
+      FIZRMM_REQUIRE_MESHCENTRAL_AGENT: ${FIZRMM_REQUIRE_MESHCENTRAL_AGENT:-true}
+      MESHCENTRAL_AGENT_INSTALLER_URL: ${MESHCENTRAL_AGENT_INSTALLER_URL:-}
+      MESHCENTRAL_AGENT_INSTALL_ARGS: ${MESHCENTRAL_AGENT_INSTALL_ARGS:-}
+      MESHCENTRAL_LINUX_AGENT_INSTALLER_URL: ${MESHCENTRAL_LINUX_AGENT_INSTALLER_URL:-}
+      MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS: ${MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS:-}
+      ZABBIX_SERVER: ${ZABBIX_SERVER:-}
+      ZABBIX_AGENT_INSTALLER_URL: ${ZABBIX_AGENT_INSTALLER_URL:-}
+      ZABBIX_AGENT_INSTALL_ARGS: ${ZABBIX_AGENT_INSTALL_ARGS:-}
+      ZABBIX_LINUX_AGENT_INSTALLER_URL: ${ZABBIX_LINUX_AGENT_INSTALLER_URL:-}
+      ZABBIX_LINUX_AGENT_INSTALL_ARGS: ${ZABBIX_LINUX_AGENT_INSTALL_ARGS:-}
+      WAZUH_MANAGER: ${WAZUH_MANAGER:-}
+      WAZUH_AGENT_INSTALLER_URL: ${WAZUH_AGENT_INSTALLER_URL:-}
+      WAZUH_AGENT_INSTALL_ARGS: ${WAZUH_AGENT_INSTALL_ARGS:-}
+      WAZUH_LINUX_AGENT_INSTALLER_URL: ${WAZUH_LINUX_AGENT_INSTALLER_URL:-}
+      WAZUH_LINUX_AGENT_INSTALL_ARGS: ${WAZUH_LINUX_AGENT_INSTALL_ARGS:-}
+      SALT_MASTER: ${SALT_MASTER:-}
+      SALT_MINION_INSTALLER_URL: ${SALT_MINION_INSTALLER_URL:-}
+      SALT_MINION_INSTALL_ARGS: ${SALT_MINION_INSTALL_ARGS:-}
+      SALT_LINUX_MINION_INSTALLER_URL: ${SALT_LINUX_MINION_INSTALLER_URL:-}
+      SALT_LINUX_MINION_INSTALL_ARGS: ${SALT_LINUX_MINION_INSTALL_ARGS:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  portal:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_FIZRMM_API_BASE: ${FIZRMM_API_BASE:-}
+      VITE_DEV_PROXY_TARGET: ${FIZRMM_DEV_PROXY_TARGET:-http://api:8000}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres18_data:
+  frontend_node_modules:

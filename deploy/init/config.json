@@ -26,7 +26,11 @@
       "bootstrap": {
         "server_url": "http://meshcentral:443",
         "installer_url": "",
-        "install_args": ""
+        "install_args": "",
+        "mesh_id": "",
+        "linux_installer_url": "",
+        "linux_install_args": "",
+        "linux_insecure_tls": "true"
       },
       "init": {
         "status": "planned",
