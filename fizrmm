@@ -7,9 +7,22 @@ cd "$ROOT_DIR"
 
 usage() {
   cat <<'USAGE'
-Usage: ./fizrmm [start|stop|restart|status|logs|reset|integrations]
+Usage: ./fizrmm [command]
 
-Default: pull latest code if possible, stop old containers, rebuild, start the app
+App commands (use docker-compose.app.yml: portal + API + PostgreSQL):
+  ./fizrmm                 Pull when possible, rebuild, and start the app in the foreground
+  ./fizrmm start           Same as the default command
+  ./fizrmm stop            Stop app containers without deleting volumes
+  ./fizrmm restart         Stop then start the app
+  ./fizrmm status          Show app container status
+  ./fizrmm logs [service]  Follow app logs, optionally for api, portal, or postgres
+  ./fizrmm reset           Stop app containers and delete app volumes/data
+
+Integration command (use docker-compose.yml with the integrations profile):
+  ./fizrmm integrations    Start optional Keycloak/MeshCentral/Zabbix/Wazuh/Salt/NATS/OpenSearch containers
+
+After './fizrmm integrations', open http://127.0.0.1:5173/, switch to Platform admin,
+open Integrations, then click 'Use deployment defaults + run' or 'Save and run setup'.
 USAGE
 }
 

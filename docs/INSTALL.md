@@ -1,6 +1,10 @@
 # FizRMM Installation Guide
 
-This is the normal install path for the FizRMM application. It starts the portal, API, and PostgreSQL database. It does **not** start the optional third-party integration containers unless you explicitly ask for them.
+This page is the step-by-step setup guide for the current FizRMM Docker workflow. There are two setup paths:
+
+- **App setup**: starts the portal, API, and PostgreSQL database. This is the normal path and is enough to open the UI, inspect seeded assets, create organizations, and create endpoint enrollment commands.
+- **Integration setup**: starts optional third-party service containers and then completes runtime setup from the portal. Use this only when you want local Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, or OpenSearch containers.
+
 
 ## 1. Prerequisites
 
@@ -21,7 +25,7 @@ From the repository root, use one command:
 ./fizrmm
 ```
 
-That command uses `docker-compose.app.yml`, pulls the latest code when possible, stops old application containers, rebuilds images, and starts the application.
+That command uses `docker-compose.app.yml`, pulls the latest code when possible, stops old application containers, rebuilds images, and starts the application. It runs in the foreground so you can see logs. Leave it running while you use the portal, or open another terminal for verification commands.
 
 Default services:
 
@@ -92,7 +96,7 @@ In another terminal:
 
 ```bash
 curl http://127.0.0.1:8000/health
-docker compose ps
+./fizrmm status
 ```
 
 List assets visible to an Acme technician:
@@ -115,18 +119,35 @@ HTTP/1.0 403 Forbidden
 
 ## 6. Optional Integration Containers
 
-The Compose file includes containers for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, OpenSearch, and `fizrmm-init` behind the `integrations` profile. The API has bundled default service URLs for these apps, and this profile runs the actual services for end-to-end adapter work:
+Skip this section if you only need the app UI/API/database. Use it when you want local third-party backing services.
+
+The default `./fizrmm` command does **not** start Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, or OpenSearch. To start those containers, run:
 
 ```bash
 ./fizrmm integrations
 ```
 
-Then complete runtime setup from the portal:
+What this command does:
 
-1. Open `http://127.0.0.1:5173/` and switch the role selector to **Platform admin**.
-2. Go to **Integrations**.
-3. Use **Use deployment defaults + run** for the bundled stack, or edit the service/bootstrap values and select **Save and run setup**.
-4. The API persists `/runtime/fizrmm/integrations.json` on the shared Compose volume and runs the deployment setup task from the web request. Integrations move from `configured` to `initialized` once their backing service endpoint is reachable from the API container.
+1. Builds the FizRMM API and portal images used by the integration stack.
+2. Starts `docker-compose.yml` with the `integrations` profile.
+3. Starts the optional services plus `fizrmm-init`, which writes initial integration runtime config when the services are reachable.
+
+Then complete setup from the portal:
+
+1. Open `http://127.0.0.1:5173/`.
+2. In the top bar, change the role selector from **Technician** to **Platform admin**.
+3. Open **Integrations** in the left navigation.
+4. If you are using the bundled local containers, click **Use deployment defaults + run** on each integration card.
+5. If you are using existing external services, edit the service/bootstrap values first, then click **Save and run setup**.
+
+What the setup buttons mean:
+
+- **Save setup** writes the values only.
+- **Save and run setup** writes the values and asks the API to run the deployment setup check.
+- **Use deployment defaults + run** fills in the bundled local Docker defaults and runs the same setup check.
+
+The API persists `/runtime/fizrmm/integrations.json` on the shared Compose volume. An integration moves from `configured` to `initialized` once its backing service endpoint is reachable from the API container. If it remains `setup_pending`, keep the integration stack running and click **Save and run setup** again after the service finishes starting.
 
 Open optional service UIs only when that profile is running:
 
@@ -134,11 +155,13 @@ Open optional service UIs only when that profile is running:
 - Zabbix: `http://127.0.0.1:8081/`
 - Keycloak: `http://127.0.0.1:8080/`
 
+Install Docker Engine with Compose, then restart your terminal.
+
 Confirm the API is reachable from the host:
 
-Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
-
 Install Docker Engine with Compose, then restart your terminal.
+
+### Docker build cannot download packages
 
 Confirm the API is reachable from the host:
 
@@ -156,7 +179,7 @@ docker compose build --no-cache api portal
 The portal proxies `/api` to the API container. If direct API health works but the browser does not, check portal logs:
 
 ```bash
-docker compose logs -f portal
+./fizrmm logs portal
 ```
 
 ### Docker build cannot download packages
@@ -190,7 +213,7 @@ The Compose file mounts PostgreSQL 18 volumes at `/var/lib/postgresql`, which le
 This stops containers and removes Compose-created volumes, including PostgreSQL data:
 
 ```bash
-docker compose down --volumes --remove-orphans
+./fizrmm reset
 ```
 
 Then start fresh:
