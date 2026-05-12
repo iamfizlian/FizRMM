@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-const API_BASE = import.meta.env.VITE_FIZRMM_API_BASE || "http://127.0.0.1:8000";
+const API_BASE = import.meta.env.VITE_FIZRMM_API_BASE || "";
 
 function headers(orgId, role) {
   return {
@@ -42,8 +42,15 @@ async function api(path, orgId, role, options = {}) {
 }
 
 function App() {
+  const remoteRoute = parseRemoteRoute(window.location.pathname, window.location.search);
+  if (remoteRoute) {
+    return <RemoteLaunchPage route={remoteRoute} />;
+  }
+
   const [orgId, setOrgId] = useState("org_acme");
   const [role, setRole] = useState("technician");
+  const [activeView, setActiveView] = useState("assets");
+  const [orgs, setOrgs] = useState([]);
   const [assets, setAssets] = useState([]);
   const [selectedAssetId, setSelectedAssetId] = useState(null);
   const [assetDetail, setAssetDetail] = useState(null);
@@ -53,11 +60,50 @@ function App() {
   const [timeline, setTimeline] = useState([]);
   const [scripts, setScripts] = useState([]);
   const [notice, setNotice] = useState("Loading control plane");
+  const [lastAction, setLastAction] = useState(null);
+  const [enrollmentSite, setEnrollmentSite] = useState("Default");
+  const [enrollmentHours, setEnrollmentHours] = useState(24);
+  const [enrollment, setEnrollment] = useState(null);
+  const [newOrgName, setNewOrgName] = useState("");
+  const [newOrgId, setNewOrgId] = useState("");
 
   const selectedAsset = useMemo(
     () => assets.find((asset) => asset.id === selectedAssetId) || assets[0],
     [assets, selectedAssetId],
   );
+
+  const activeScripts = scripts.filter(
+    (script) => !script.org_id || role === "platform-admin" || script.org_id === orgId,
+  );
+
+  const alerts = useMemo(() => {
+    const assetAlerts = assets
+      .filter((asset) => asset.state !== "active")
+      .map((asset) => ({
+        id: `asset-${asset.id}`,
+        severity: asset.state === "offline" ? "critical" : "warning",
+        title: `${asset.hostname} is ${asset.state}`,
+        body: `${asset.operating_system} at ${asset.site} needs technician review.`,
+      }));
+    const integrationAlerts = integrations
+      .filter((integration) => !integration.configured || !integration.initialized)
+      .map((integration) => ({
+        id: `integration-${integration.id}`,
+        severity: integration.configured ? "info" : "warning",
+        title: `${integration.name} is ${integration.state}`,
+        body: integration.summary,
+      }));
+    return [...assetAlerts, ...integrationAlerts];
+  }, [assets, integrations]);
+
+  const logEvents = useMemo(() => timeline.map((event) => ({
+    id: event.id,
+    source: event.source,
+    title: event.title,
+    body: event.body,
+    kind: event.kind,
+    created_at: event.created_at,
+  })), [timeline]);
 
   useEffect(() => {
     refreshAssets();
@@ -66,26 +112,32 @@ function App() {
   useEffect(() => {
     if (selectedAsset?.id) {
       refreshAssetDetail(selectedAsset.id);
+    } else {
+      setAssetDetail(null);
+      setAgents([]);
+      setTimeline([]);
     }
   }, [selectedAsset?.id, orgId, role]);
 
   async function refreshAssets() {
     try {
-      const [assetPayload, scriptPayload] = await Promise.all([
+      const [orgPayload, assetPayload, scriptPayload, integrationPayload] = await Promise.all([
+        api("/api/orgs", orgId, role),
         api("/api/assets", orgId, role),
         api("/api/scripts", orgId, role),
+        api("/api/integrations", orgId, role),
       ]);
+      setOrgs(orgPayload.organizations);
       setAssets(assetPayload.assets);
       setScripts(scriptPayload.scripts);
+      setIntegrations(integrationPayload.integrations);
+      setIntegrationReady(integrationPayload.ready_for_real_endpoints);
       setSelectedAssetId((current) => (
         assetPayload.assets.some((asset) => asset.id === current)
           ? current
           : assetPayload.assets[0]?.id || null
       ));
-      const integrationPayload = await api("/api/integrations", orgId, role);
-      setIntegrations(integrationPayload.integrations);
-      setIntegrationReady(integrationPayload.ready_for_real_endpoints);
-      setNotice("Portal connected");
+      setNotice("Portal connected to FizRMM API");
     } catch (error) {
       setNotice(error.message);
     }
@@ -114,7 +166,11 @@ function App() {
         method: "POST",
         body: JSON.stringify({ engine }),
       });
-      setNotice(`${engine} session brokered: ${payload.session_id}`);
+      setLastAction({ type: "Remote session", payload });
+      setNotice(payload.message || `${engine} session brokered: ${payload.session_id}`);
+      if (payload.launch_url) {
+        window.open(payload.launch_url, "_blank", "noopener,noreferrer");
+      }
       refreshAssetDetail(selectedAsset.id);
     } catch (error) {
       setNotice(error.message);
@@ -128,12 +184,61 @@ function App() {
         method: "POST",
         body: JSON.stringify({ script_id: scriptId }),
       });
+      setLastAction({ type: "Script run", payload: { ...payload, script_id: scriptId } });
       setNotice(`Salt job queued: ${payload.job_id}`);
       refreshAssetDetail(selectedAsset.id);
     } catch (error) {
       setNotice(error.message);
     }
   }
+
+  async function createEnrollment(event) {
+    event.preventDefault();
+    try {
+      const payload = await api("/api/enrollments", orgId, role, {
+        method: "POST",
+        body: JSON.stringify({ org_id: orgId, site: enrollmentSite, expires_hours: Number(enrollmentHours) }),
+      });
+      setEnrollment(payload);
+      setLastAction({ type: "Endpoint enrollment", payload });
+      setNotice(`Enrollment token created for ${orgId}`);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
+  async function createOrganization(event) {
+    event.preventDefault();
+    try {
+      const payload = await api("/api/orgs", orgId, role, {
+        method: "POST",
+        body: JSON.stringify({ name: newOrgName, id: newOrgId }),
+      });
+      setNewOrgName("");
+      setNewOrgId("");
+      setOrgId(payload.organization.id);
+      setLastAction({ type: "Organization created", payload });
+      setNotice(`Organization created: ${payload.organization.name}`);
+      refreshAssets();
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
+  function selectAsset(assetId) {
+    setSelectedAssetId(assetId);
+    setActiveView("assets");
+  }
+
+  const views = [
+    { id: "assets", label: "Assets", icon: <Boxes size={18} /> },
+    { id: "enroll", label: "Enroll endpoint", icon: <MonitorCog size={18} /> },
+    { id: "automation", label: "Automation", icon: <TerminalSquare size={18} /> },
+    { id: "integrations", label: "Integrations", icon: <PlugZap size={18} /> },
+    { id: "alerts", label: "Alerts", icon: <Bell size={18} /> },
+    { id: "logs", label: "Logs", icon: <Search size={18} /> },
+    { id: "access", label: "Access", icon: <ShieldCheck size={18} /> },
+  ];
 
   return (
     <main className="app-shell">
@@ -146,11 +251,15 @@ function App() {
           </div>
         </div>
         <nav>
-          <button className="nav-item active"><Boxes size={18} /> Assets</button>
-          <button className="nav-item"><TerminalSquare size={18} /> Automation</button>
-          <button className="nav-item"><Bell size={18} /> Alerts</button>
-          <button className="nav-item"><Search size={18} /> Logs</button>
-          <button className="nav-item"><ShieldCheck size={18} /> Access</button>
+          {views.map((view) => (
+            <button
+              className={`nav-item ${activeView === view.id ? "active" : ""}`}
+              key={view.id}
+              onClick={() => setActiveView(view.id)}
+            >
+              {view.icon} {view.label}
+            </button>
+          ))}
         </nav>
       </aside>
 
@@ -158,12 +267,12 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Tenant-isolated technician portal</p>
-            <h1>Assets</h1>
+            <h1>{views.find((view) => view.id === activeView)?.label || "FizRMM"}</h1>
           </div>
           <div className="controls">
             <select value={orgId} onChange={(event) => setOrgId(event.target.value)}>
-              <option value="org_acme">Acme Medical</option>
-              <option value="org_globex">Globex Manufacturing</option>
+              {orgs.map((org) => <option value={org.id} key={org.id}>{org.name}</option>)}
+              {orgs.length === 0 && <option value={orgId}>{orgId}</option>}
             </select>
             <select value={role} onChange={(event) => setRole(event.target.value)}>
               <option value="technician">Technician</option>
@@ -178,18 +287,23 @@ function App() {
         <section className="status-strip">
           <Stat icon={<Activity />} label="Visible assets" value={assets.length} />
           <Stat icon={<Radio />} label="Agents tracked" value={agents.length || "-"} />
-          <Stat icon={<Command />} label="Scripts" value={scripts.length} />
+          <Stat icon={<Command />} label="Scripts" value={activeScripts.length} />
+          <Stat icon={<Bell />} label="Open alerts" value={alerts.length} />
           <Stat icon={<PlugZap />} label="Endpoint readiness" value={integrationReady ? "Ready" : "Needs config"} />
           <Stat icon={<CheckCircle2 />} label="State" value={notice} />
         </section>
 
         <section className="content-grid">
           <section className="asset-list" aria-label="Asset list">
+            <div className="panel-heading">
+              <strong>Managed assets</strong>
+              <small>{orgId}</small>
+            </div>
             {assets.map((asset) => (
               <button
                 key={asset.id}
                 className={`asset-row ${selectedAsset?.id === asset.id ? "selected" : ""}`}
-                onClick={() => setSelectedAssetId(asset.id)}
+                onClick={() => selectAsset(asset.id)}
               >
                 <span className={`state-dot ${asset.state}`} />
                 <span>
@@ -198,85 +312,381 @@ function App() {
                 </span>
               </button>
             ))}
+            {assets.length === 0 && <div className="empty-list">No assets visible for this context.</div>}
           </section>
 
           <section className="asset-detail">
-            {selectedAsset ? (
-              <>
-                <div className="detail-heading">
-                  <div>
-                    <p className="eyebrow">{selectedAsset.org_id}</p>
-                    <h2>{selectedAsset.hostname}</h2>
-                    <span>{selectedAsset.operating_system} / {selectedAsset.site}</span>
-                  </div>
-                  <div className="action-bar">
-                    <button onClick={() => launchRemote("meshcentral")}><MonitorCog size={17} /> Remote</button>
-                    <button onClick={() => launchRemote("guacamole")}><TerminalSquare size={17} /> Jump</button>
-                  </div>
-                </div>
-
-                <div className="agents">
-                  {agents.map((agent) => (
-                    <div className="agent-card" key={agent.agent}>
-                      <strong>{agent.agent}</strong>
-                      <span>{agent.service_state}</span>
-                      <small>{agent.version} / {agent.update_channel}</small>
-                    </div>
-                  ))}
-                </div>
-
-                <section className="integration-panel">
-                  <h3>Connector identities</h3>
-                  <div className="connector-grid">
-                    {(assetDetail?.connectors || []).map((connector) => (
-                      <div className="connector-card" key={`${connector.connector}-${connector.external_id}`}>
-                        <Link2 size={16} />
-                        <strong>{connector.connector}</strong>
-                        <span>{connector.external_id}</span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="integration-panel">
-                  <h3>Integration readiness</h3>
-                  <div className="integration-grid">
-                    {integrations.map((integration) => (
-                      <div className={`integration-card ${integration.configured ? "configured" : "missing"}`} key={integration.id}>
-                        <strong>{integration.name}</strong>
-                        <span>{integration.state}</span>
-                        <small>{integration.summary}</small>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <div className="script-bar">
-                  {scripts.map((script) => (
-                    <button key={script.id} onClick={() => runScript(script.id)}>
-                      <Play size={16} /> {script.name}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="timeline">
-                  <h3>Device timeline</h3>
-                  {timeline.map((event) => (
-                    <article key={event.id} className="timeline-event">
-                      <span>{event.kind}</span>
-                      <strong>{event.title}</strong>
-                      <p>{event.body}</p>
-                    </article>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="empty-state">No assets visible for this context.</div>
+            {activeView === "assets" && (
+              <AssetView
+                selectedAsset={selectedAsset}
+                assetDetail={assetDetail}
+                agents={agents}
+                timeline={timeline}
+                lastAction={lastAction}
+                scripts={activeScripts}
+                onRemote={launchRemote}
+                onScript={runScript}
+              />
+            )}
+            {activeView === "enroll" && (
+              <EnrollmentView
+                orgId={orgId}
+                site={enrollmentSite}
+                hours={enrollmentHours}
+                enrollment={enrollment}
+                onSiteChange={setEnrollmentSite}
+                onHoursChange={setEnrollmentHours}
+                onSubmit={createEnrollment}
+              />
+            )}
+            {activeView === "automation" && (
+              <AutomationView
+                selectedAsset={selectedAsset}
+                scripts={activeScripts}
+                lastAction={lastAction}
+                onScript={runScript}
+              />
+            )}
+            {activeView === "integrations" && (
+              <IntegrationsView integrations={integrations} integrationReady={integrationReady} />
+            )}
+            {activeView === "alerts" && (
+              <AlertsView alerts={alerts} />
+            )}
+            {activeView === "logs" && (
+              <LogsView selectedAsset={selectedAsset} events={logEvents} />
+            )}
+            {activeView === "access" && (
+              <AccessView
+                orgs={orgs}
+                role={role}
+                orgName={newOrgName}
+                orgId={newOrgId}
+                onOrgNameChange={setNewOrgName}
+                onOrgIdChange={setNewOrgId}
+                onSubmit={createOrganization}
+                lastAction={lastAction}
+              />
             )}
           </section>
         </section>
       </section>
     </main>
+  );
+}
+
+function AssetView({ selectedAsset, assetDetail, agents, timeline, lastAction, scripts, onRemote, onScript }) {
+  if (!selectedAsset) {
+    return <div className="empty-state">No assets visible for this context.</div>;
+  }
+
+  return (
+    <>
+      <div className="detail-heading">
+        <div>
+          <p className="eyebrow">{selectedAsset.org_id}</p>
+          <h2>{selectedAsset.hostname}</h2>
+          <span>{selectedAsset.operating_system} / {selectedAsset.site}</span>
+        </div>
+        <div className="action-bar">
+          <button onClick={() => onRemote("meshcentral")}><MonitorCog size={17} /> Broker remote</button>
+          <button onClick={() => onRemote("guacamole")}><TerminalSquare size={17} /> Broker jump</button>
+        </div>
+      </div>
+
+      <ActionResult action={lastAction} />
+
+      <div className="agents">
+        {agents.map((agent) => (
+          <div className="agent-card" key={agent.agent}>
+            <strong>{agent.agent}</strong>
+            <span>{agent.service_state}</span>
+            <small>{agent.version} / {agent.update_channel}</small>
+          </div>
+        ))}
+      </div>
+
+      <section className="integration-panel">
+        <h3>Connector identities</h3>
+        <div className="connector-grid">
+          {(assetDetail?.connectors || []).map((connector) => (
+            <div className="connector-card" key={`${connector.connector}-${connector.external_id}`}>
+              <Link2 size={16} />
+              <strong>{connector.connector}</strong>
+              <span>{connector.external_id}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="integration-panel">
+        <h3>Run automation on this asset</h3>
+        <div className="script-bar inline-panel">
+          {scripts.map((script) => (
+            <button key={script.id} onClick={() => onScript(script.id)}>
+              <Play size={16} /> {script.name}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <Timeline events={timeline} />
+    </>
+  );
+}
+
+function EnrollmentView({ orgId, site, hours, enrollment, onSiteChange, onHoursChange, onSubmit }) {
+  const bootstrapUrl = enrollment?.bootstrap_url ? `${API_BASE}${enrollment.bootstrap_url}` : "";
+  const linuxBootstrapUrl = enrollment?.linux_bootstrap_url ? `${API_BASE}${enrollment.linux_bootstrap_url}` : "";
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Endpoint deployment</p>
+        <h2>Create a one-time enrollment</h2>
+        <p className="muted">Generate a token and bootstrap commands for Windows or Linux endpoints in the selected tenant.</p>
+      </div>
+      <form className="form-grid" onSubmit={onSubmit}>
+        <label>
+          Organization
+          <input value={orgId} readOnly />
+        </label>
+        <label>
+          Site
+          <input value={site} onChange={(event) => onSiteChange(event.target.value)} placeholder="Acme HQ" />
+        </label>
+        <label>
+          Expires in hours
+          <input type="number" min="1" max="168" value={hours} onChange={(event) => onHoursChange(event.target.value)} />
+        </label>
+        <button type="submit"><MonitorCog size={17} /> Create enrollment token</button>
+      </form>
+
+      {enrollment && (
+        <div className="result-card">
+          <h3>Enrollment ready</h3>
+          <ResultRow label="Token" value={enrollment.token} />
+          <ResultRow label="Windows bootstrap URL" value={bootstrapUrl} />
+          <ResultRow label="Linux bootstrap URL" value={linuxBootstrapUrl} />
+          <div className="download-actions">
+            <a href={bootstrapUrl} download="fizrmm-bootstrap.ps1">Download Windows bootstrap.ps1</a>
+            <a href={linuxBootstrapUrl} download="fizrmm-bootstrap.sh">Download Linux bootstrap.sh</a>
+          </div>
+          <ResultRow label="Windows download command" value={`Invoke-WebRequest -Uri "${bootstrapUrl}" -OutFile .\\fizrmm-bootstrap.ps1`} mono />
+          <ResultRow label="Windows run command" value={enrollment.command} mono />
+          <ResultRow label="Linux run command" value={enrollment.linux_command} mono />
+          <small>Download the generated bootstrap script first, then run it as Administrator on Windows or with sudo/root on Linux. Set MESHCENTRAL_MESH_ID or a Linux MeshCentral installer URL first; otherwise the bootstrap claim fails before creating an unmanaged asset.</small>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AutomationView({ selectedAsset, scripts, lastAction, onScript }) {
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Salt-backed workflow placeholder</p>
+        <h2>Run scripts</h2>
+        <p className="muted">Queue a script against the selected asset. The current slice records an audit/timeline event and returns a Salt job placeholder.</p>
+      </div>
+      <div className="selected-target">
+        <strong>Target asset</strong>
+        <span>{selectedAsset ? `${selectedAsset.hostname} (${selectedAsset.id})` : "No asset selected"}</span>
+      </div>
+      <div className="script-grid">
+        {scripts.map((script) => (
+          <button key={script.id} onClick={() => onScript(script.id)} disabled={!selectedAsset}>
+            <Play size={16} />
+            <span>
+              <strong>{script.name}</strong>
+              <small>{script.runtime} · revision {script.revision}{script.approval_required ? " · approval required" : ""}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+      <ActionResult action={lastAction} />
+    </div>
+  );
+}
+
+function IntegrationsView({ integrations, integrationReady }) {
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Integration readiness</p>
+        <h2>{integrationReady ? "Ready for real endpoints" : "Subsystem configuration needed"}</h2>
+        <p className="muted">FizRMM treats integrations as real only when the runtime config reports both service configuration and init completion.</p>
+      </div>
+      <div className="integration-grid expanded">
+        {integrations.map((integration) => (
+          <div className={`integration-card ${integration.configured ? "configured" : "missing"}`} key={integration.id}>
+            <strong>{integration.name}</strong>
+            <span>{integration.state}</span>
+            <small>{integration.summary}</small>
+            {integration.missing?.length > 0 && <small>Missing: {integration.missing.join(", ")}</small>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AlertsView({ alerts }) {
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Alert queue</p>
+        <h2>{alerts.length ? `${alerts.length} active alerts` : "No active alerts"}</h2>
+        <p className="muted">Current alerts are derived from asset state and integration readiness until the Zabbix/Wazuh adapters are fully wired.</p>
+      </div>
+      <div className="alert-grid">
+        {alerts.map((alert) => (
+          <article className={`alert-card ${alert.severity}`} key={alert.id}>
+            <span>{alert.severity}</span>
+            <strong>{alert.title}</strong>
+            <p>{alert.body}</p>
+          </article>
+        ))}
+        {alerts.length === 0 && <div className="empty-state compact">All clear for the selected tenant.</div>}
+      </div>
+    </div>
+  );
+}
+
+function LogsView({ selectedAsset, events }) {
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Device logs</p>
+        <h2>{selectedAsset ? `Timeline log for ${selectedAsset.hostname}` : "No asset selected"}</h2>
+        <p className="muted">This view exposes the current control-plane timeline as searchable log plumbing until OpenSearch/Wazuh ingestion is connected.</p>
+      </div>
+      <div className="log-table">
+        {events.map((event) => (
+          <article key={event.id}>
+            <code>{event.kind}</code>
+            <strong>{event.title}</strong>
+            <span>{event.source} · {event.created_at}</span>
+            <p>{event.body}</p>
+          </article>
+        ))}
+        {events.length === 0 && <div className="empty-state compact">No timeline events for this asset.</div>}
+      </div>
+    </div>
+  );
+}
+
+function AccessView({ orgs, role, orgName, orgId, onOrgNameChange, onOrgIdChange, onSubmit, lastAction }) {
+  return (
+    <div className="workflow-panel">
+      <div>
+        <p className="eyebrow">Tenant access</p>
+        <h2>Organizations</h2>
+        <p className="muted">Switch to Platform admin to create new customer organizations. Technicians can only view organizations in their simulated claim.</p>
+      </div>
+      <div className="org-grid">
+        {orgs.map((org) => (
+          <article className="org-card" key={org.id}>
+            <strong>{org.name}</strong>
+            <code>{org.id}</code>
+            <span>{org.status}</span>
+          </article>
+        ))}
+      </div>
+      <form className="form-grid" onSubmit={onSubmit}>
+        <label>
+          Organization name
+          <input value={orgName} onChange={(event) => onOrgNameChange(event.target.value)} placeholder="New Customer" />
+        </label>
+        <label>
+          Optional organization ID
+          <input value={orgId} onChange={(event) => onOrgIdChange(event.target.value)} placeholder="org_new_customer" />
+        </label>
+        <button type="submit" disabled={role !== "platform-admin"}><ShieldCheck size={17} /> Add organization</button>
+      </form>
+      {role !== "platform-admin" && <p className="muted">Organization creation is disabled for technician role.</p>}
+      <ActionResult action={lastAction?.type === "Organization created" ? lastAction : null} />
+    </div>
+  );
+}
+
+
+function parseRemoteRoute(pathname, search) {
+  const match = pathname.match(/^\/remote\/([^/]+)\/([^/]+)$/);
+  if (!match) return null;
+  const params = new URLSearchParams(search);
+  return {
+    engine: match[1],
+    sessionId: match[2],
+    status: params.get("status") || "requested",
+    message: params.get("message") || "Remote session request recorded.",
+    asset: params.get("asset") || "endpoint",
+  };
+}
+
+function RemoteLaunchPage({ route }) {
+  const isUnavailable = route.status !== "brokered";
+  return (
+    <main className="remote-launch-page">
+      <section className={`remote-launch-card ${isUnavailable ? "warning" : "ready"}`}>
+        <p className="eyebrow">{route.engine} launch broker</p>
+        <h1>{isUnavailable ? "Remote access is not ready yet" : "Remote session requested"}</h1>
+        <p>{route.message}</p>
+        <div className="result-card compact">
+          <ResultRow label="asset" value={route.asset} />
+          <ResultRow label="session" value={route.sessionId} />
+          <ResultRow label="status" value={route.status} />
+        </div>
+        {isUnavailable && (
+          <p className="muted">
+            This asset was enrolled before a remote-access agent was installed, or the bootstrap was run with MeshCentral enforcement disabled.
+            Configure MESHCENTRAL_MESH_ID or the remote-access installer URL, create a new enrollment, and re-run the endpoint bootstrap.
+          </p>
+        )}
+        <a className="launch-link" href="/">Back to FizRMM portal</a>
+      </section>
+    </main>
+  );
+}
+
+function ActionResult({ action }) {
+  if (!action) return null;
+  return (
+    <div className="result-card compact">
+      <h3>{action.type}</h3>
+      {Object.entries(action.payload).map(([key, value]) => (
+        <ResultRow key={key} label={key} value={typeof value === "object" ? JSON.stringify(value) : value} />
+      ))}
+      {action.payload.launch_url && (
+        <a className="launch-link" href={action.payload.launch_url} target="_blank" rel="noreferrer">
+          Open launch page
+        </a>
+      )}
+    </div>
+  );
+}
+
+function ResultRow({ label, value, mono = false }) {
+  return (
+    <div className="result-row">
+      <span>{label}</span>
+      <code className={mono ? "wrap" : ""}>{String(value)}</code>
+    </div>
+  );
+}
+
+function Timeline({ events }) {
+  return (
+    <div className="timeline">
+      <h3>Device timeline</h3>
+      {events.map((event) => (
+        <article key={event.id} className="timeline-event">
+          <span>{event.kind}</span>
+          <strong>{event.title}</strong>
+          <p>{event.body}</p>
+        </article>
+      ))}
+    </div>
   );
 }
 

@@ -3,10 +3,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
+import re
 from secrets import token_urlsafe
 from typing import Any
 from uuid import uuid4
+from urllib.parse import urlencode
+import os
 
+from .enrollment_commands import enrollment_bootstrap_payload
 from .models import (
     AccessDenied,
     AgentHealth,
@@ -68,6 +72,30 @@ class PostgresControlPlaneStore:
         with self._cursor(context) as cur:
             cur.execute("select id, name, status from organizations order by name")
             return [self._organization(row) for row in cur.fetchall()]
+
+    def create_organization(self, context: TenantContext, name: str, org_id: str | None = None) -> Organization:
+        if not context.platform_admin:
+            raise AccessDenied("only platform admins can create organizations")
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValidationError("organization name is required")
+        normalized_id = org_id.strip() if org_id else f"org_{re.sub(r'[^a-z0-9]+', '_', normalized_name.lower()).strip('_')}"
+        if not normalized_id or not re.fullmatch(r"[a-zA-Z0-9_-]+", normalized_id):
+            raise ValidationError("organization id may only contain letters, numbers, underscores, and hyphens")
+        with self._cursor(context) as cur:
+            cur.execute(
+                """
+                insert into organizations (id, name)
+                values (%s, %s)
+                on conflict (id) do nothing
+                returning id, name, status
+                """,
+                (normalized_id, normalized_name),
+            )
+            row = cur.fetchone()
+        if row is None:
+            raise ValidationError(f"organization already exists: {normalized_id}")
+        return self._organization(row)
 
     def list_assets(self, context: TenantContext) -> list[Asset]:
         with self._cursor(context) as cur:
@@ -193,10 +221,40 @@ class PostgresControlPlaneStore:
                 ),
             )
 
+        agent_state = "unknown"
+        with self._cursor(context) as cur:
+            cur.execute(
+                """
+                select service_state
+                from agent_health
+                where asset_id = %s and agent = 'meshcentral'
+                order by last_seen_at desc
+                limit 1
+                """,
+                (asset.id,),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                agent_state = str(row["service_state"])
+
+        status = "brokered"
+        message = "Remote session request recorded."
+        if engine == "meshcentral" and agent_state.startswith("skipped"):
+            status = "agent_not_installed"
+            message = "MeshCentral is not installed on this endpoint. Configure a Linux MeshCentral installer URL and re-run enrollment."
+        elif engine == "meshcentral" and not os.getenv("MESHCENTRAL_URL", "").strip():
+            status = "integration_not_configured"
+            message = "MeshCentral server URL is not configured, so FizRMM can only record the request."
+        elif engine == "guacamole" and not os.getenv("GUACAMOLE_URL", "").strip():
+            status = "integration_not_configured"
+            message = "Guacamole broker URL is not configured, so FizRMM can only record the request."
+        query = urlencode({"status": status, "message": message, "asset": asset.hostname})
         return {
             "session_id": session_id,
             "engine": engine,
-            "launch_url": f"https://portal.local/remote/{engine}/{session_id}",
+            "status": status,
+            "message": message,
+            "launch_url": f"/remote/{engine}/{session_id}?{query}",
         }
 
     def create_script_run(
@@ -275,15 +333,7 @@ class PostgresControlPlaneStore:
             )
             enrollment = self._enrollment(cur.fetchone())
 
-        return {
-            "enrollment": enrollment,
-            "token": token,
-            "bootstrap_url": f"/api/enrollments/{token}/bootstrap.ps1",
-            "command": (
-                "powershell.exe -ExecutionPolicy Bypass -File .\\fizrmm-bootstrap.ps1 "
-                f"-PortalUrl {config.get('portal_url')} -EnrollmentToken {token}"
-            ),
-        }
+        return enrollment_bootstrap_payload(enrollment, token, config)
 
     def get_enrollment_by_token(self, token: str) -> EndpointEnrollment:
         with self._system_cursor() as cur:
@@ -321,7 +371,18 @@ class PostgresControlPlaneStore:
         if not operating_system.strip():
             raise ValidationError("operating_system is required")
 
-        enrollment = self._active_enrollment(token)
+        enrollment = self.get_enrollment_by_token(token)
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
+        if enrollment.status in {"claimed", "completed"} and enrollment.asset_id:
+            return {
+                "asset_id": enrollment.asset_id,
+                "org_id": enrollment.org_id,
+                "site": enrollment.site,
+                "config": enrollment.config,
+            }
+        if enrollment.status != "active":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
         asset_id = enrollment.asset_id or f"asset-{uuid4()}"
         with self._system_cursor() as cur:
             cur.execute(
@@ -375,14 +436,16 @@ class PostgresControlPlaneStore:
         from psycopg.types.json import Jsonb
 
         enrollment = self.get_enrollment_by_token(token)
-        if enrollment.status != "claimed":
-            raise ValidationError(f"enrollment token is {enrollment.status}")
-        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
-            raise ValidationError("enrollment token has expired")
-        if enrollment.asset_id is None:
-            raise ValueError("enrollment must be claimed before reporting")
         if not isinstance(agents, list):
             raise ValidationError("agents must be a list")
+        if parse_iso_datetime(enrollment.expires_at) <= parse_iso_datetime(utcnow_iso()):
+            raise ValidationError("enrollment token has expired")
+        if enrollment.status == "completed":
+            return {"asset_id": enrollment.asset_id, "status": enrollment.status, "agents_reported": len(agents)}
+        if enrollment.status != "claimed":
+            raise ValidationError(f"enrollment token is {enrollment.status}")
+        if enrollment.asset_id is None:
+            raise ValueError("enrollment must be claimed before reporting")
 
         with self._system_cursor() as cur:
             for agent_report in agents:
