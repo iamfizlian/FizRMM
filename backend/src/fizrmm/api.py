@@ -220,6 +220,16 @@ def deployment_config() -> dict[str, object]:
                 "linux_install_args",
                 env_value("ZABBIX_LINUX_AGENT_INSTALL_ARGS"),
             ),
+            "linux_installer_url": runtime_bootstrap_value(
+                "zabbix",
+                "linux_installer_url",
+                os.getenv("ZABBIX_LINUX_AGENT_INSTALLER_URL", ""),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "zabbix",
+                "linux_install_args",
+                os.getenv("ZABBIX_LINUX_AGENT_INSTALL_ARGS", ""),
+            ),
         },
         "wazuh": {
             "manager_url": runtime_bootstrap_value("wazuh", "manager_url", env_value("WAZUH_MANAGER", BUNDLED_BOOTSTRAP_DEFAULTS["wazuh_manager"])),
