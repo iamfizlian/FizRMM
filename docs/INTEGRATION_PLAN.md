@@ -39,7 +39,7 @@ The complete deployment should have three layers:
 ## Completion Plan
 
 1. Convert Docker Compose into the integrated development stack.
-   - Move Keycloak, NATS, and OpenSearch into the default stack or an explicit `full` profile used by the normal quick start.
+   - Keep Keycloak, NATS, OpenSearch, and other subsystem containers out of the default application stack; use the explicit `integrations` profile only when developing adapters.
    - Add MeshCentral, Salt, Zabbix, Wazuh, and their required data volumes/networks.
    - Add health checks for every backing service.
    - Add one `fizrmm-init` service that waits for health checks and applies all subsystem bootstrap config.

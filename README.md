@@ -1,41 +1,93 @@
 # FizRMM
 
-FizRMM is a greenfield internal MSP RMM control plane. The current build starts with the foundation from the architecture brief: portal-owned tenancy, canonical assets, multiple endpoint agent identities, brokered actions, and a device timeline.
+FizRMM is an MSP RMM control-plane application. The supported Docker startup runs the application itself: PostgreSQL, the API, and the technician portal. Optional third-party service containers are no longer part of the default install path.
 
-This is an early development slice, not a production RMM yet. It gives you a working local portal, API, and PostgreSQL-backed control-plane store so the core shape can be exercised before wiring in Keycloak, MeshCentral, Salt, Zabbix, Wazuh, and OpenSearch for real.
+## Quick Start
 
-## Quick Start With Docker
-
-You need Docker Compose. From the repo root:
+Use this path when you want the working FizRMM app only:
 
 ```bash
-docker compose up --build
+./fizrmm
 ```
 
-To start the integrated lab stack scaffold, use:
+When the containers finish starting, open:
+
+```text
+http://127.0.0.1:5173/
+```
+
+The default app stack is intentionally small: portal + API + PostgreSQL. It does **not** start Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, or OpenSearch. Those optional services are started only by the integrations workflow below.
+
+On a cloud VM, replace `127.0.0.1` with the VM public IP after opening TCP `5173` in the cloud security rules and host firewall. The browser only needs the portal port; the portal proxies `/api` to the backend container.
+
+## What Was Added In This Change
+
+This update added four user-visible setup areas:
+
+1. **One-command app startup** with `./fizrmm`, backed by `docker-compose.app.yml`.
+2. **Endpoint enrollment** from the portal, including Windows `bootstrap.ps1` and Linux `bootstrap.sh` downloads.
+3. **Integration setup from the portal**. Platform admins can save service/bootstrap values, apply bundled defaults, and run a deployment setup check from the UI.
+4. **Optional local integration stack** via `./fizrmm integrations` for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, and OpenSearch.
+
+## Which Setup Path Should I Use?
+
+| Goal | Command | What to do next |
+| --- | --- | --- |
+| Run the FizRMM app UI/API/database | `./fizrmm` | Open `http://127.0.0.1:5173/`. |
+| Check app containers | `./fizrmm status` | Confirms portal, API, and Postgres are running. |
+| Watch app logs | `./fizrmm logs` | Use `./fizrmm logs api` or `./fizrmm logs portal` for one service. |
+| Start optional third-party services too | `./fizrmm integrations` | In the portal, switch to **Platform admin** → **Integrations** → **Use deployment defaults + run**. |
+| Reset local app data | `./fizrmm reset` | Removes app containers and volumes, including PostgreSQL data. |
+
+## Stop, Update, Restart
+
+Stop the running application:
 
 ```bash
-docker compose --profile full up --build
+./fizrmm stop
 ```
 
-The `full` profile adds Keycloak, NATS, MeshCentral, Salt, Zabbix, Wazuh, OpenSearch, and a `fizrmm-init` job that writes runtime integration config for the API.
-
-Open:
-
-- Portal: `http://127.0.0.1:5173/`
-- API health: `http://127.0.0.1:8000/health`
-
-Stop it:
+Use the same command after GitHub updates are available; it pulls, rebuilds, and restarts the app:
 
 ```bash
-docker compose down
+./fizrmm
 ```
 
-For the full Docker setup guide, see [docs/INSTALL.md](docs/INSTALL.md).
+Restart without pulling code:
 
-Endpoint deployment is partially implemented: the control plane can issue enrollment tokens and a Windows bootstrap script. See [docs/ENDPOINT_DEPLOYMENT.md](docs/ENDPOINT_DEPLOYMENT.md) for how PCs are enrolled and what still needs real subsystem integration.
+```bash
+./fizrmm restart
+```
 
-The staged path to a complete integrated RMM is tracked in [docs/INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md).
+## What Starts By Default
+
+`./fizrmm` uses `docker-compose.app.yml` and starts only the working FizRMM application services:
+
+- `postgres`: application database with seeded organizations, assets, scripts, and timeline data.
+- `api`: FizRMM backend at `http://127.0.0.1:8000`.
+- `portal`: FizRMM web UI at `http://127.0.0.1:5173`.
+
+The portal includes the current application workflows: assets, endpoint enrollment, automation requests, integration readiness, alerts, logs, and access/org creation.
+
+## Optional External Service Containers
+
+FizRMM ships bundled service defaults for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, and OpenSearch. These defaults let the portal show you exactly what would be used, but they do not start the third-party products by themselves.
+
+To run those products locally:
+
+```bash
+./fizrmm integrations
+```
+
+Then finish setup in the web UI:
+
+1. Open `http://127.0.0.1:5173/`.
+2. Change the role dropdown in the top bar to **Platform admin**.
+3. Open **Integrations**.
+4. For the bundled stack, click **Use deployment defaults + run** on each integration. If you use external services, edit the service/bootstrap fields first and click **Save and run setup**.
+5. The API writes the runtime config to the shared Docker volume and marks an integration `initialized` after the service endpoint is reachable from the API container.
+
+For endpoint enrollment, MeshCentral still needs a real MeshCentral device-group ID (`MESHCENTRAL_MESH_ID`) or an explicit Linux installer URL before the bootstrap can install the remote-control agent.
 
 ## Smoke Checks
 
@@ -49,45 +101,50 @@ curl -i -H 'X-FizRMM-Orgs: org_acme' http://127.0.0.1:8000/api/assets/asset-glob
 
 The last command should return `403 Forbidden`; that is the tenant boundary test.
 
-## Tests Without Docker
+## Tests
+
+Backend tests can be run through Make from the repository root or from `frontend/`:
+
+```bash
+make test-backend
+```
+
+From the repository root, you can also run the Python command directly:
 
 ```bash
 PYTHONPATH=backend/src python3 -m unittest discover backend/tests
+```
+
+Build the frontend through Docker if your host does not have Node.js/npm installed. The same target works from the repository root or from `frontend/`:
+
+```bash
+make frontend-build
+```
+
+If you do have npm installed locally, you can also build directly:
+
+```bash
 cd frontend
 npm run build
 ```
 
-## Current Slice
+## Current Capabilities
 
-- Dockerized backend and portal for one-command local startup.
-- PostgreSQL-backed Docker install with seeded organizations, assets, agents, scripts, and timeline events.
-- Dependency-light backend prototype with tenant-aware route contracts.
-- Canonical domain model for orgs, assets, connector IDs, agent health, scripts, audit, and timeline events.
-- PostgreSQL schema draft with row-level security policies.
-- React portal shell scaffold for the technician experience.
-- Integration readiness API and portal visibility for Keycloak, MeshCentral, Salt, Zabbix, and Wazuh configuration.
-- Optional Docker Compose profile for Keycloak, NATS, and OpenSearch.
+- Dockerized app startup for portal, API, and PostgreSQL.
+- Tenant-aware backend route contracts.
+- PostgreSQL-backed organizations, assets, connector identities, agent health, scripts, audit, timeline, and endpoint enrollment.
+- Portal workflows for assets, enrollment bootstrap downloads, automation requests, integration readiness, alerts, logs, and organization creation.
+- Windows and Linux endpoint bootstrap script generation.
 
-## Not Yet Implemented
+## Still In Progress
 
-- MeshCentral, Zabbix, Wazuh, or Salt server integration.
-- Real remote control, monitoring, log collection, or script execution.
-- Signed/package-managed Windows/macOS/Linux installers.
-
-## Optional Infrastructure
-
-The current app starts Postgres by default. When you are ready to start the heavier future integration services:
-
-```bash
-cp .env.example .env
-docker compose --profile infra up -d keycloak nats opensearch
-```
-
-The compose stack is the next integration target and is intentionally a development baseline, not production hardening.
+- Real MeshCentral, Zabbix, Wazuh, and Salt adapters.
+- Production remote control, monitoring, log collection, and script execution.
+- Signed/package-managed endpoint installers.
 
 ## Tenant Simulation
 
-Until Keycloak is wired in, the backend simulates technician claims with HTTP headers:
+Until real SSO is wired in, the backend simulates technician claims with HTTP headers:
 
 - `X-FizRMM-User`: technician identity, defaults to `demo-tech`
 - `X-FizRMM-Orgs`: comma-separated allowed org IDs, defaults to `org_acme`
@@ -97,5 +154,7 @@ Examples:
 
 ```bash
 curl -H 'X-FizRMM-Orgs: org_globex' http://127.0.0.1:8000/api/assets
-curl -H 'X-FizRMM-Role: platform-admin' http://127.0.0.1:8000/api/assets
+curl -H 'X-FizRMM-Role: platform-admin' http://127.0.0.1:8000/api/orgs
 ```
+
+For detailed setup and troubleshooting, see [docs/INSTALL.md](docs/INSTALL.md). For Codespaces, see [docs/CODESPACES.md](docs/CODESPACES.md). Endpoint deployment details are in [docs/ENDPOINT_DEPLOYMENT.md](docs/ENDPOINT_DEPLOYMENT.md).

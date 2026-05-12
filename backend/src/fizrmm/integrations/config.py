@@ -42,3 +42,36 @@ def runtime_service_value(name: str, key: str, default: str = "") -> str:
     if not isinstance(service, dict):
         return default
     return str(service.get(key) or default)
+
+
+def save_runtime_integration(name: str, service: dict[str, Any], bootstrap: dict[str, Any]) -> dict[str, Any]:
+    config = load_runtime_config()
+    integrations = config.setdefault("integrations", {})
+    if not isinstance(integrations, dict):
+        integrations = {}
+        config["integrations"] = integrations
+    integration = integrations.setdefault(name, {})
+    if not isinstance(integration, dict):
+        integration = {}
+        integrations[name] = integration
+    existing_service = integration.setdefault("service", {})
+    if not isinstance(existing_service, dict):
+        existing_service = {}
+        integration["service"] = existing_service
+    existing_bootstrap = integration.setdefault("bootstrap", {})
+    if not isinstance(existing_bootstrap, dict):
+        existing_bootstrap = {}
+        integration["bootstrap"] = existing_bootstrap
+    for key, value in service.items():
+        existing_service[key] = value
+    for key, value in bootstrap.items():
+        existing_bootstrap[key] = value
+    init = integration.setdefault("init", {})
+    if isinstance(init, dict):
+        init["status"] = "setup_saved"
+        init["message"] = "Integration setup was saved from the FizRMM portal. Run/init the backing service to mark it initialized."
+        init["runtime_config_written"] = True
+    path = runtime_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
+    return integration
