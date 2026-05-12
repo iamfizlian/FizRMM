@@ -41,6 +41,9 @@ def public_portal_url(headers: Any, stored_url: object = "") -> str:
     return str(stored_url or request_url or deployment_config()["portal_url"]).rstrip("/")
 
 
+def env_value(name: str, default: str = "") -> str:
+    return os.getenv(name, "").strip() or default
+
 
 def public_url_with_port(base_url: str, port: int, scheme: str = "https") -> str:
     parsed = urlparse(base_url)
@@ -63,7 +66,7 @@ def meshcentral_public_url(portal_url: str) -> str:
 
 
 def meshcentral_mesh_id(default: str = "") -> str:
-    return runtime_bootstrap_value("meshcentral", "mesh_id", os.getenv("MESHCENTRAL_MESH_ID", default)).strip()
+    return runtime_bootstrap_value("meshcentral", "mesh_id", env_value("MESHCENTRAL_MESH_ID", default)).strip()
 
 
 def meshcentral_installer_defaults(portal_url: str, mesh_id: str = "") -> dict[str, str]:
@@ -84,7 +87,7 @@ def meshcentral_installer_defaults(portal_url: str, mesh_id: str = "") -> dict[s
         {
             "linux_installer_url": f"{public_url}/meshagents?id=6&meshid={encoded_mesh_id}&installflags=0",
             "linux_install_args": '"$INSTALLER_PATH" -install',
-            "linux_insecure_tls": os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", "true"),
+            "linux_insecure_tls": env_value("MESHCENTRAL_LINUX_INSECURE_TLS", "true"),
             "installer_url": f"{public_url}/meshagents?id=4&meshid={encoded_mesh_id}&installflags=0",
             "install_args": "{INSTALLER_PATH} -fullinstall",
         }
@@ -143,52 +146,79 @@ class TextResponse:
     content_type: str = "text/plain; charset=utf-8"
 
 
+BUNDLED_SERVICE_URLS = {
+    "identity": "http://keycloak:8080",
+    "meshcentral": "https://meshcentral:443",
+    "zabbix": "http://zabbix-web:8080/api_jsonrpc.php",
+    "wazuh": "https://wazuh-manager:55000",
+    "salt": "tcp://salt-master:4505",
+    "opensearch": "https://opensearch:9200",
+    "nats": "nats://nats:4222",
+}
+
+BUNDLED_BOOTSTRAP_DEFAULTS = {
+    "zabbix_server": "zabbix-server",
+    "wazuh_manager": "wazuh-manager",
+    "salt_master": "salt-master",
+}
+
+
 def deployment_config() -> dict[str, object]:
-    portal_url = os.getenv("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
+    portal_url = env_value("FIZRMM_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
     meshcentral_defaults = meshcentral_installer_defaults(portal_url)
     meshcentral_url = meshcentral_public_url(portal_url)
     return {
         "portal_url": portal_url,
         "meshcentral": {
-            "mesh_id": runtime_bootstrap_value("meshcentral", "mesh_id", os.getenv("MESHCENTRAL_MESH_ID", meshcentral_defaults["mesh_id"])),
-            "server_url": runtime_bootstrap_value("meshcentral", "server_url", os.getenv("MESHCENTRAL_URL", meshcentral_url)),
+            "mesh_id": runtime_bootstrap_value("meshcentral", "mesh_id", env_value("MESHCENTRAL_MESH_ID", meshcentral_defaults["mesh_id"])),
+            "server_url": runtime_bootstrap_value("meshcentral", "server_url", env_value("MESHCENTRAL_URL", meshcentral_url)),
             "installer_url": runtime_bootstrap_value(
                 "meshcentral",
                 "installer_url",
-                os.getenv("MESHCENTRAL_AGENT_INSTALLER_URL", meshcentral_defaults["installer_url"]),
+                env_value("MESHCENTRAL_AGENT_INSTALLER_URL", meshcentral_defaults["installer_url"]),
             ),
             "install_args": runtime_bootstrap_value(
                 "meshcentral",
                 "install_args",
-                os.getenv("MESHCENTRAL_AGENT_INSTALL_ARGS", meshcentral_defaults["install_args"]),
+                env_value("MESHCENTRAL_AGENT_INSTALL_ARGS", meshcentral_defaults["install_args"]),
             ),
             "linux_installer_url": runtime_bootstrap_value(
                 "meshcentral",
                 "linux_installer_url",
-                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALLER_URL", meshcentral_defaults["linux_installer_url"]),
+                env_value("MESHCENTRAL_LINUX_AGENT_INSTALLER_URL", meshcentral_defaults["linux_installer_url"]),
             ),
             "linux_install_args": runtime_bootstrap_value(
                 "meshcentral",
                 "linux_install_args",
-                os.getenv("MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS", meshcentral_defaults["linux_install_args"]),
+                env_value("MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS", meshcentral_defaults["linux_install_args"]),
             ),
             "linux_insecure_tls": runtime_bootstrap_value(
                 "meshcentral",
                 "linux_insecure_tls",
-                os.getenv("MESHCENTRAL_LINUX_INSECURE_TLS", meshcentral_defaults["linux_insecure_tls"]),
+                env_value("MESHCENTRAL_LINUX_INSECURE_TLS", meshcentral_defaults["linux_insecure_tls"]),
             ),
         },
         "zabbix": {
-            "server_url": runtime_bootstrap_value("zabbix", "server_url", os.getenv("ZABBIX_SERVER", "")),
+            "server_url": runtime_bootstrap_value("zabbix", "server_url", env_value("ZABBIX_SERVER", BUNDLED_BOOTSTRAP_DEFAULTS["zabbix_server"])),
             "installer_url": runtime_bootstrap_value(
                 "zabbix",
                 "installer_url",
-                os.getenv("ZABBIX_AGENT_INSTALLER_URL", ""),
+                env_value("ZABBIX_AGENT_INSTALLER_URL"),
             ),
             "install_args": runtime_bootstrap_value(
                 "zabbix",
                 "install_args",
-                os.getenv("ZABBIX_AGENT_INSTALL_ARGS", ""),
+                env_value("ZABBIX_AGENT_INSTALL_ARGS"),
+            ),
+            "linux_installer_url": runtime_bootstrap_value(
+                "zabbix",
+                "linux_installer_url",
+                env_value("ZABBIX_LINUX_AGENT_INSTALLER_URL"),
+            ),
+            "linux_install_args": runtime_bootstrap_value(
+                "zabbix",
+                "linux_install_args",
+                env_value("ZABBIX_LINUX_AGENT_INSTALL_ARGS"),
             ),
             "linux_installer_url": runtime_bootstrap_value(
                 "zabbix",
@@ -202,41 +232,41 @@ def deployment_config() -> dict[str, object]:
             ),
         },
         "wazuh": {
-            "manager_url": runtime_bootstrap_value("wazuh", "manager_url", os.getenv("WAZUH_MANAGER", "")),
+            "manager_url": runtime_bootstrap_value("wazuh", "manager_url", env_value("WAZUH_MANAGER", BUNDLED_BOOTSTRAP_DEFAULTS["wazuh_manager"])),
             "installer_url": runtime_bootstrap_value(
                 "wazuh",
                 "installer_url",
-                os.getenv("WAZUH_AGENT_INSTALLER_URL", ""),
+                env_value("WAZUH_AGENT_INSTALLER_URL"),
             ),
-            "install_args": runtime_bootstrap_value("wazuh", "install_args", os.getenv("WAZUH_AGENT_INSTALL_ARGS", "")),
+            "install_args": runtime_bootstrap_value("wazuh", "install_args", env_value("WAZUH_AGENT_INSTALL_ARGS")),
             "linux_installer_url": runtime_bootstrap_value(
                 "wazuh",
                 "linux_installer_url",
-                os.getenv("WAZUH_LINUX_AGENT_INSTALLER_URL", ""),
+                env_value("WAZUH_LINUX_AGENT_INSTALLER_URL"),
             ),
             "linux_install_args": runtime_bootstrap_value(
                 "wazuh",
                 "linux_install_args",
-                os.getenv("WAZUH_LINUX_AGENT_INSTALL_ARGS", ""),
+                env_value("WAZUH_LINUX_AGENT_INSTALL_ARGS"),
             ),
         },
         "salt": {
-            "master_url": runtime_bootstrap_value("salt", "master_url", os.getenv("SALT_MASTER", "")),
+            "master_url": runtime_bootstrap_value("salt", "master_url", env_value("SALT_MASTER", BUNDLED_BOOTSTRAP_DEFAULTS["salt_master"])),
             "installer_url": runtime_bootstrap_value(
                 "salt",
                 "installer_url",
-                os.getenv("SALT_MINION_INSTALLER_URL", ""),
+                env_value("SALT_MINION_INSTALLER_URL"),
             ),
-            "install_args": runtime_bootstrap_value("salt", "install_args", os.getenv("SALT_MINION_INSTALL_ARGS", "")),
+            "install_args": runtime_bootstrap_value("salt", "install_args", env_value("SALT_MINION_INSTALL_ARGS")),
             "linux_installer_url": runtime_bootstrap_value(
                 "salt",
                 "linux_installer_url",
-                os.getenv("SALT_LINUX_MINION_INSTALLER_URL", ""),
+                env_value("SALT_LINUX_MINION_INSTALLER_URL"),
             ),
             "linux_install_args": runtime_bootstrap_value(
                 "salt",
                 "linux_install_args",
-                os.getenv("SALT_LINUX_MINION_INSTALL_ARGS", ""),
+                env_value("SALT_LINUX_MINION_INSTALL_ARGS"),
             ),
         },
     }
@@ -248,7 +278,7 @@ def integration_status() -> dict[str, object]:
     identity_missing = [
         name
         for name in ("KEYCLOAK_URL", "OIDC_CLIENT_ID")
-        if not (os.getenv(name, "").strip() or _runtime_identity_value(name))
+        if not _identity_config_value(name)
     ]
     integrations = [
         _identity_integration(identity_missing),
@@ -256,25 +286,29 @@ def integration_status() -> dict[str, object]:
             "meshcentral",
             "MeshCentral",
             config["meshcentral"],  # type: ignore[index]
-            required=("server_url", "installer_url"),
+            required=("server_url",),
+            bootstrap_required=("mesh_id or linux_installer_url",),
         ),
         _agent_integration(
             "zabbix",
             "Zabbix",
             config["zabbix"],  # type: ignore[index]
-            required=("server_url", "installer_url"),
+            required=("server_url",),
+            bootstrap_required=(),
         ),
         _agent_integration(
             "wazuh",
             "Wazuh",
             config["wazuh"],  # type: ignore[index]
-            required=("manager_url", "installer_url"),
+            required=("manager_url",),
+            bootstrap_required=(),
         ),
         _agent_integration(
             "salt",
             "Salt",
             config["salt"],  # type: ignore[index]
-            required=("master_url", "installer_url"),
+            required=("master_url",),
+            bootstrap_required=(),
         ),
         _runtime_only_integration("opensearch", "OpenSearch"),
         _runtime_only_integration("nats", "NATS JetStream"),
@@ -303,9 +337,9 @@ def _identity_integration(missing: list[str]) -> dict[str, object]:
         "configured": configured,
         "initialized": initialized,
         "adapter_implemented": False,
-        "service_url": runtime_service_value("identity", "url", os.getenv("KEYCLOAK_URL", "")),
+        "service_url": _identity_config_value("KEYCLOAK_URL"),
         "summary": (
-            "OIDC settings are present for a Keycloak-backed auth integration."
+            "Keycloak service defaults are configured for the bundled stack."
             if configured
             else "Technician identity is currently simulated with X-FizRMM-* headers."
         ),
@@ -319,9 +353,11 @@ def _agent_integration(
     name: str,
     config: object,
     required: tuple[str, ...],
+    bootstrap_required: tuple[str, ...] = (),
 ) -> dict[str, object]:
     values = config if isinstance(config, dict) else {}
     missing = [field for field in required if not str(values.get(field) or "").strip()]
+    bootstrap_missing = _bootstrap_missing(values, bootstrap_required)
     runtime = _runtime_integration(integration_id)
     configured = not missing
     initialized = _is_initialized(runtime)
@@ -332,20 +368,42 @@ def _agent_integration(
         "configured": configured,
         "initialized": initialized,
         "adapter_implemented": False,
-        "service_url": _service_url(integration_id),
+        "service_url": _service_url(integration_id) or _first_config_value(values, required),
         "summary": (
-            f"{name} has the minimum URL configuration for bootstrap."
+            f"{name} service defaults are configured for the bundled stack."
             if configured
-            else f"{name} bootstrap/install settings are incomplete."
+            else f"{name} service settings are incomplete."
         ),
         "missing": missing,
+        "bootstrap_missing": bootstrap_missing,
         "init": runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {},
     }
 
 
+def _bootstrap_missing(values: dict[str, object], required: tuple[str, ...]) -> list[str]:
+    missing: list[str] = []
+    for field in required:
+        if " or " in field:
+            options = tuple(part.strip() for part in field.split(" or "))
+            if not any(str(values.get(option) or "").strip() for option in options):
+                missing.append(field)
+        elif not str(values.get(field) or "").strip():
+            missing.append(field)
+    return missing
+
+
+def _first_config_value(values: dict[str, object], fields: tuple[str, ...]) -> str:
+    for field in fields:
+        value = str(values.get(field) or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def _runtime_only_integration(integration_id: str, name: str) -> dict[str, object]:
     runtime = _runtime_integration(integration_id)
-    configured = bool(runtime_service_value(integration_id, "url", ""))
+    service_url = _service_url(integration_id)
+    configured = bool(service_url)
     initialized = _is_initialized(runtime)
     return {
         "id": integration_id,
@@ -354,8 +412,8 @@ def _runtime_only_integration(integration_id: str, name: str) -> dict[str, objec
         "configured": configured,
         "initialized": initialized,
         "adapter_implemented": False,
-        "service_url": _service_url(integration_id),
-        "summary": f"{name} runtime service configuration is {'present' if configured else 'missing'}.",
+        "service_url": service_url,
+        "summary": f"{name} service defaults are {'configured' if configured else 'missing'}.",
         "missing": [] if configured else ["service.url"],
         "init": runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {},
     }
@@ -381,12 +439,33 @@ def _runtime_identity_value(env_name: str) -> str:
     return ""
 
 
+def _identity_config_value(env_name: str) -> str:
+    defaults = {
+        "KEYCLOAK_URL": BUNDLED_SERVICE_URLS["identity"],
+        "OIDC_CLIENT_ID": "fizrmm-portal",
+        "OIDC_CLIENT_SECRET": env_value("OIDC_CLIENT_SECRET"),
+    }
+    return os.getenv(env_name, "").strip() or _runtime_identity_value(env_name) or defaults.get(env_name, "")
+
+
 def _service_url(integration_id: str) -> str:
     for key in ("url", "api_url"):
         value = runtime_service_value(integration_id, key, "")
         if value:
             return value
-    return ""
+    env_map = {
+        "identity": "KEYCLOAK_URL",
+        "meshcentral": "MESHCENTRAL_URL",
+        "zabbix": "ZABBIX_API_URL",
+        "wazuh": "WAZUH_API_URL",
+        "salt": "SALT_API_URL",
+        "opensearch": "OPENSEARCH_URL",
+        "nats": "NATS_URL",
+    }
+    env_name = env_map.get(integration_id, "")
+    if env_name and os.getenv(env_name, "").strip():
+        return os.getenv(env_name, "").strip()
+    return BUNDLED_SERVICE_URLS.get(integration_id, "")
 
 
 def _is_initialized(runtime: dict[str, object]) -> bool:

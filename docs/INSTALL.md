@@ -115,9 +115,7 @@ HTTP/1.0 403 Forbidden
 
 ## 6. Optional Integration Containers
 
-The Compose file includes optional containers for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, OpenSearch, and `fizrmm-init`. They are behind the `integrations` profile and are not part of the normal application install.
-
-Only use this if you are developing integration adapters:
+The Compose file includes containers for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, OpenSearch, and `fizrmm-init` behind the `integrations` profile. The API has bundled default service URLs for these apps, and this profile runs the actual services for end-to-end adapter work:
 
 ```bash
 ./fizrmm integrations
@@ -129,9 +127,9 @@ Open optional service UIs only when that profile is running:
 - Zabbix: `http://127.0.0.1:8081/`
 - Keycloak: `http://127.0.0.1:8080/`
 
-Confirm the API is reachable from the host:
-
 Another process is using `5173` or `8000`. Stop the process or change the host port mapping in `docker-compose.yml`.
+
+### `docker: command not found`
 
 Install Docker Engine with Compose, then restart your terminal.
 

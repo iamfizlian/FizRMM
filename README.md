@@ -50,15 +50,13 @@ The portal includes the current application workflows: assets, endpoint enrollme
 
 ## Optional External Service Containers
 
-The repository still includes optional Compose definitions for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, OpenSearch, and `fizrmm-init`, but they are behind the `integrations` profile and are not required to run the application UI.
-
-Only start those containers if you are explicitly working on subsystem integration code:
+FizRMM now ships bundled service defaults for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, and OpenSearch so the integration readiness view no longer reports those applications as unconfigured just because an override env var is blank. To run the actual third-party containers locally, start the `integrations` profile:
 
 ```bash
 ./fizrmm integrations
 ```
 
-Those services are scaffolding for future adapters. They are not required for normal app startup.
+Those services are available for end-to-end integration work. For endpoint enrollment, MeshCentral still needs a real MeshCentral device-group ID (`MESHCENTRAL_MESH_ID`) or an explicit Linux installer URL before the bootstrap can install the remote agent.
 
 ## Smoke Checks
 

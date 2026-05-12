@@ -515,7 +515,7 @@ function IntegrationsView({ integrations, integrationReady }) {
       <div>
         <p className="eyebrow">Integration readiness</p>
         <h2>{integrationReady ? "Ready for real endpoints" : "Subsystem configuration needed"}</h2>
-        <p className="muted">FizRMM treats integrations as real only when the runtime config reports both service configuration and init completion.</p>
+        <p className="muted">Bundled service defaults are preconfigured; init completion and endpoint bootstrap requirements show what still needs to be finished for real endpoints.</p>
       </div>
       <div className="integration-grid expanded">
         {integrations.map((integration) => (
@@ -523,7 +523,8 @@ function IntegrationsView({ integrations, integrationReady }) {
             <strong>{integration.name}</strong>
             <span>{integration.state}</span>
             <small>{integration.summary}</small>
-            {integration.missing?.length > 0 && <small>Missing: {integration.missing.join(", ")}</small>}
+            {integration.missing?.length > 0 && <small>Missing service config: {integration.missing.join(", ")}</small>}
+            {integration.bootstrap_missing?.length > 0 && <small>Endpoint bootstrap needs: {integration.bootstrap_missing.join(", ")}</small>}
           </div>
         ))}
       </div>
