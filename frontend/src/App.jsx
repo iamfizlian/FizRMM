@@ -116,6 +116,51 @@ const FIELD_COPY = {
   },
 };
 
+const INTEGRATION_GUIDANCE = {
+  identity: {
+    purpose: "Technician login and tenant-aware access.",
+    decision: "Use bundled Keycloak for a lab, or point FizRMM at your existing OIDC provider.",
+    common: { service: ["public_url", "realm", "client_id"], bootstrap: [] },
+    note: "Endpoint enrollment does not use identity settings directly.",
+  },
+  meshcentral: {
+    purpose: "Remote desktop, shell, and file access.",
+    decision: "Create a MeshCentral device group, then paste its mesh ID. FizRMM can generate agent URLs from that.",
+    common: { service: ["public_url"], bootstrap: ["mesh_id", "server_url"] },
+    note: "Without MeshCentral, assets can enroll but remote-control buttons remain placeholders.",
+  },
+  zabbix: {
+    purpose: "Monitoring metrics and availability checks.",
+    decision: "Set the endpoint-reachable Zabbix server address. Leave installer fields blank unless you host custom packages.",
+    common: { service: ["url"], bootstrap: ["server_url"] },
+    note: "Linux endpoints use the built-in package installer when custom installer URLs are blank.",
+  },
+  wazuh: {
+    purpose: "Security telemetry, inventory, and log collection.",
+    decision: "Set the endpoint-reachable Wazuh manager address. On Arch/CachyOS the bootstrap can use paru/yay for wazuh-agent.",
+    common: { service: ["url"], bootstrap: ["manager_url"] },
+    note: "Only fill installer URLs if you host your own Wazuh agent packages.",
+  },
+  salt: {
+    purpose: "Script execution and automation jobs.",
+    decision: "Set the endpoint-reachable Salt master address. On Arch/CachyOS the bootstrap can use paru/yay for salt.",
+    common: { service: ["api_url"], bootstrap: ["master_url"] },
+    note: "After enrollment, accept or preseed the minion key on the Salt master.",
+  },
+  opensearch: {
+    purpose: "Search and indexed telemetry storage.",
+    decision: "Use the bundled OpenSearch service or point FizRMM at an existing cluster.",
+    common: { service: ["url"], bootstrap: [] },
+    note: "Endpoint bootstrap scripts do not talk directly to OpenSearch.",
+  },
+  nats: {
+    purpose: "Message bus for automation workers.",
+    decision: "Use bundled NATS JetStream or point FizRMM at an existing NATS service.",
+    common: { service: ["url"], bootstrap: [] },
+    note: "Endpoint bootstrap scripts do not talk directly to NATS.",
+  },
+};
+
 function headers(orgId, role) {
   return {
     "Content-Type": "application/json",
@@ -648,7 +693,7 @@ function IntegrationsView({ integrations, integrationReady, role, onSetup }) {
       </section>
       <div className="readiness-help">
         <strong>How to read this page</strong>
-        <span>Control plane fields are for the FizRMM server. Endpoint bootstrap fields are written into future bootstrap scripts. Blank optional installer fields mean the built-in installer path will be used when supported.</span>
+        <span>For a first working deployment, fill the recommended fields shown on each card and use defaults. Open advanced installer overrides only when you host your own agent packages.</span>
       </div>
       <div className="integration-grid expanded">
         {integrations.map((integration) => (
@@ -738,10 +783,10 @@ function integrationRequiredFields(integration) {
 }
 
 function IntegrationFieldSummary({ integration }) {
-  const fields = setupFields(integration);
+  const guide = INTEGRATION_GUIDANCE[integration.id] || {};
   const required = integrationRequiredFields(integration);
-  const primaryService = required.service.length ? required.service : fields.service.slice(0, 2);
-  const primaryBootstrap = required.bootstrap.length ? required.bootstrap : fields.bootstrap.slice(0, 3);
+  const primaryService = required.service.length ? required.service : guide.common?.service || [];
+  const primaryBootstrap = required.bootstrap.length ? required.bootstrap : guide.common?.bootstrap || [];
   return (
     <div className="integration-fill-guide">
       {primaryService.length > 0 && (
@@ -760,8 +805,46 @@ function IntegrationFieldSummary({ integration }) {
   );
 }
 
+function recommendedFields(integration, section) {
+  const fields = setupFields(integration)[section];
+  const common = INTEGRATION_GUIDANCE[integration.id]?.common?.[section] || [];
+  const wanted = common.filter((field) => fields.includes(field));
+  return wanted.length ? wanted : fields.slice(0, section === "service" ? 2 : 3);
+}
+
+function advancedFields(integration, section) {
+  const fields = setupFields(integration)[section];
+  const recommended = new Set(recommendedFields(integration, section));
+  return fields.filter((field) => !recommended.has(field));
+}
+
+function SetupFieldGroup({ title, body, integration, section, fields, values, onUpdate }) {
+  if (fields.length === 0) return null;
+  return (
+    <fieldset>
+      <legend>{title}</legend>
+      {body && <p>{body}</p>}
+      {fields.map((field) => (
+        <SetupField
+          key={`${section}-${field}`}
+          integration={integration}
+          section={section}
+          field={field}
+          value={values[section][field] || ""}
+          defaultValue={integration.setup_defaults?.[section]?.[field] || ""}
+          onChange={(value) => onUpdate(section, field, value)}
+        />
+      ))}
+    </fieldset>
+  );
+}
+
 function IntegrationCard({ integration, canConfigure, onSetup }) {
-  const fields = setupFields(integration);
+  const guide = INTEGRATION_GUIDANCE[integration.id] || {};
+  const recommendedService = recommendedFields(integration, "service");
+  const recommendedBootstrap = recommendedFields(integration, "bootstrap");
+  const advancedService = advancedFields(integration, "service");
+  const advancedBootstrap = advancedFields(integration, "bootstrap");
   const [values, setValues] = useState(() => setupInitialValues(integration));
   const [saving, setSaving] = useState(false);
 
@@ -813,11 +896,18 @@ function IntegrationCard({ integration, canConfigure, onSetup }) {
       <div className="integration-card-header">
         <div>
           <strong>{integration.name}</strong>
-          <small>{integration.summary}</small>
+          <small>{guide.purpose || integration.summary}</small>
         </div>
         <span>{integration.state}</span>
       </div>
+      {guide.decision && (
+        <div className="setup-decision">
+          <strong>Decision</strong>
+          <span>{guide.decision}</span>
+        </div>
+      )}
       <IntegrationFieldSummary integration={integration} />
+      {guide.note && <small>{guide.note}</small>}
       {integration.missing?.length > 0 && <small>Missing service config: {integration.missing.join(", ")}</small>}
       {integration.bootstrap_missing?.length > 0 && <small>Endpoint bootstrap needs: {integration.bootstrap_missing.join(", ")}</small>}
       {integration.init?.message && <small>Setup task: {integration.init.message}</small>}
@@ -827,39 +917,46 @@ function IntegrationCard({ integration, canConfigure, onSetup }) {
         </ol>
       )}
       <form className="integration-setup-form" onSubmit={submit}>
-        {fields.service.length > 0 && (
-          <fieldset>
-            <legend>{INTEGRATION_SETUP_COPY.service.title}</legend>
-            <p>{INTEGRATION_SETUP_COPY.service.body}</p>
-            {fields.service.map((field) => (
-              <SetupField
-                key={`service-${field}`}
-                integration={integration}
-                section="service"
-                field={field}
-                value={values.service[field] || ""}
-                defaultValue={integration.setup_defaults?.service?.[field] || ""}
-                onChange={(value) => update("service", field, value)}
-              />
-            ))}
-          </fieldset>
-        )}
-        {fields.bootstrap.length > 0 && (
-          <fieldset>
-            <legend>{INTEGRATION_SETUP_COPY.bootstrap.title}</legend>
-            <p>{INTEGRATION_SETUP_COPY.bootstrap.body}</p>
-            {fields.bootstrap.map((field) => (
-              <SetupField
-                key={`bootstrap-${field}`}
-                integration={integration}
-                section="bootstrap"
-                field={field}
-                value={values.bootstrap[field] || ""}
-                defaultValue={integration.setup_defaults?.bootstrap?.[field] || ""}
-                onChange={(value) => update("bootstrap", field, value)}
-              />
-            ))}
-          </fieldset>
+        <SetupFieldGroup
+          title="Recommended setup"
+          body="Fill these first. They are the values normally needed for this subsystem to work."
+          integration={integration}
+          section="service"
+          fields={recommendedService}
+          values={values}
+          onUpdate={update}
+        />
+        <SetupFieldGroup
+          title="Endpoint enrollment"
+          body={recommendedBootstrap.length ? "These values are written into new bootstrap scripts." : ""}
+          integration={integration}
+          section="bootstrap"
+          fields={recommendedBootstrap}
+          values={values}
+          onUpdate={update}
+        />
+        {(advancedService.length > 0 || advancedBootstrap.length > 0) && (
+          <details className="advanced-setup">
+            <summary>Advanced installer and API overrides</summary>
+            <SetupFieldGroup
+              title={INTEGRATION_SETUP_COPY.service.title}
+              body={INTEGRATION_SETUP_COPY.service.body}
+              integration={integration}
+              section="service"
+              fields={advancedService}
+              values={values}
+              onUpdate={update}
+            />
+            <SetupFieldGroup
+              title={INTEGRATION_SETUP_COPY.bootstrap.title}
+              body={INTEGRATION_SETUP_COPY.bootstrap.body}
+              integration={integration}
+              section="bootstrap"
+              fields={advancedBootstrap}
+              values={values}
+              onUpdate={update}
+            />
+          </details>
         )}
         <div className="setup-actions">
           <button type="submit" disabled={!canConfigure || saving}>

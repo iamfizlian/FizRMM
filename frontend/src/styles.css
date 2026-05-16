@@ -443,6 +443,47 @@ button {
   text-transform: none;
 }
 
+.setup-decision {
+  background: #fffaf0;
+  border: 1px solid #e3c57d;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.integration-card.configured .setup-decision {
+  background: #eef8f3;
+  border-color: #a8d2bd;
+}
+
+.setup-decision strong {
+  color: #31464f;
+  font-size: 12px;
+}
+
+.setup-decision span {
+  color: #4f6068;
+  font-size: 13px;
+  line-height: 1.45;
+  text-transform: none;
+}
+
+.advanced-setup {
+  border: 1px dashed #cfdad7;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.advanced-setup summary {
+  color: #31464f;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .script-bar {
   margin-top: 18px;
   border-bottom: 1px solid #dbe3e1;
