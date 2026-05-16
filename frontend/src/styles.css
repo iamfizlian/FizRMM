@@ -721,9 +721,32 @@ button {
 .integration-setup-form {
   border-top: 1px solid #dbe3e1;
   display: grid;
-  gap: 8px;
+  gap: 12px;
   margin-top: 8px;
   padding-top: 10px;
+}
+
+.integration-setup-form fieldset {
+  border: 1px solid #dbe3e1;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+}
+
+.integration-setup-form legend {
+  color: #1d2d33;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.integration-setup-form fieldset > p {
+  color: #60717a;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
 }
 
 .integration-setup-form label {
@@ -733,11 +756,21 @@ button {
   gap: 4px;
 }
 
+.setup-field span {
+  color: #31464f;
+  font-weight: 700;
+}
+
 .integration-setup-form input {
   border: 1px solid #cfdad7;
   border-radius: 6px;
   color: #1d2d33;
   padding: 7px 8px;
+}
+
+.setup-field small {
+  color: #72838a;
+  line-height: 1.4;
 }
 
 .setup-actions {

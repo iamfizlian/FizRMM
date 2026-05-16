@@ -194,6 +194,29 @@ package_install() {{
   fi
 }}
 
+aur_install() {{
+  local package="$1"
+  local helper=""
+  local aur_user="${{SUDO_USER:-}}"
+  if [ -z "$aur_user" ] || [ "$aur_user" = "root" ]; then
+    echo "AUR install for $package requires running the bootstrap through sudo from a non-root user." >&2
+    return 1
+  fi
+  if command -v paru >/dev/null 2>&1; then
+    helper="$(command -v paru)"
+  elif command -v yay >/dev/null 2>&1; then
+    helper="$(command -v yay)"
+  else
+    echo "No supported AUR helper found for $package; install paru/yay or provide an explicit Linux installer URL." >&2
+    return 1
+  fi
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$aur_user" -- "$helper" -S --needed --noconfirm "$package"
+  else
+    sudo -u "$aur_user" "$helper" -S --needed --noconfirm "$package"
+  fi
+}}
+
 config_set() {{
   local file="$1"
   local key="$2"
@@ -260,6 +283,8 @@ REPO
       else
         WAZUH_MANAGER="$manager" yum install -y wazuh-agent
       fi
+    elif command -v pacman >/dev/null 2>&1 && aur_install wazuh-agent; then
+      true
     else
       echo "Wazuh publishes official Linux agent packages for apt/yum/dnf systems; this package manager is not supported automatically." >&2
       return 1
@@ -297,7 +322,9 @@ install_salt_builtin() {{
     return 1
   fi
   if ! command -v salt-minion >/dev/null 2>&1; then
-    if package_install salt-minion; then
+    if package_install salt-minion || package_install salt; then
+      true
+    elif command -v pacman >/dev/null 2>&1 && aur_install salt; then
       true
     else
       curl -fsSL https://bootstrap.saltproject.io -o /tmp/bootstrap-salt.sh
@@ -307,6 +334,10 @@ install_salt_builtin() {{
       fi
       sh /tmp/bootstrap-salt.sh -P stable
     fi
+  fi
+  if ! command -v salt-minion >/dev/null 2>&1; then
+    echo "Salt minion was not installed by any supported installer path." >&2
+    return 1
   fi
   mkdir -p /etc/salt/minion.d
   printf 'master: %s\nid: %s\n' "$master" "$HOSTNAME_VALUE" > /etc/salt/minion.d/fizrmm.conf

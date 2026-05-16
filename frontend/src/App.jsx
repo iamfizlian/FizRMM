@@ -22,12 +22,98 @@ const API_BASE = import.meta.env.VITE_FIZRMM_API_BASE || "";
 
 const INTEGRATION_SETUP_FIELDS = {
   identity: { service: ["url", "public_url", "realm", "client_id", "issuer_url", "jwks_url"], bootstrap: [] },
-  meshcentral: { service: ["url", "public_url"], bootstrap: ["server_url", "mesh_id", "linux_installer_url", "linux_install_args", "linux_insecure_tls"] },
-  zabbix: { service: ["url"], bootstrap: ["server_url", "linux_installer_url", "linux_install_args"] },
-  wazuh: { service: ["url"], bootstrap: ["manager_url", "linux_installer_url", "linux_install_args"] },
-  salt: { service: ["api_url", "url"], bootstrap: ["master_url", "linux_installer_url", "linux_install_args"] },
+  meshcentral: { service: ["url", "public_url"], bootstrap: ["server_url", "mesh_id", "linux_installer_url", "linux_install_args", "linux_insecure_tls", "installer_url", "install_args"] },
+  zabbix: { service: ["url"], bootstrap: ["server_url", "linux_installer_url", "linux_install_args", "installer_url", "install_args"] },
+  wazuh: { service: ["url"], bootstrap: ["manager_url", "linux_installer_url", "linux_install_args", "installer_url", "install_args"] },
+  salt: { service: ["api_url", "url"], bootstrap: ["master_url", "linux_installer_url", "linux_install_args", "installer_url", "install_args"] },
   opensearch: { service: ["url"], bootstrap: [] },
   nats: { service: ["url"], bootstrap: [] },
+};
+
+const INTEGRATION_SETUP_COPY = {
+  service: {
+    title: "Control plane connection",
+    body: "Used by the FizRMM server to reach the subsystem API or web service.",
+  },
+  bootstrap: {
+    title: "Endpoint bootstrap values",
+    body: "Baked into new enrollment scripts so endpoints know where to install and register agents.",
+  },
+};
+
+const FIELD_COPY = {
+  identity: {
+    service: {
+      url: ["Internal Keycloak URL", "Container or LAN URL used by the API.", "http://keycloak:8080"],
+      public_url: ["Public Keycloak URL", "Browser-facing URL technicians use for sign-in.", "https://auth.example.com"],
+      realm: ["Realm", "Keycloak realm that contains FizRMM users and roles.", "fizrmm"],
+      client_id: ["OIDC client ID", "Client identifier configured for the FizRMM portal.", "fizrmm-portal"],
+      issuer_url: ["Issuer URL", "OIDC issuer URL for token validation.", "https://auth.example.com/realms/fizrmm"],
+      jwks_url: ["JWKS URL", "Key set endpoint used to verify bearer tokens.", "https://auth.example.com/realms/fizrmm/protocol/openid-connect/certs"],
+    },
+  },
+  meshcentral: {
+    service: {
+      url: ["Internal MeshCentral URL", "URL the API uses to reach MeshCentral.", "https://meshcentral:443"],
+      public_url: ["Public MeshCentral URL", "Endpoint-reachable URL for agent downloads.", "https://rmm.example.com:8443"],
+    },
+    bootstrap: {
+      server_url: ["MeshCentral server URL", "Server URL the installed agent should connect to.", "https://rmm.example.com:8443"],
+      mesh_id: ["Device group mesh ID", "MeshCentral mesh/... identifier for the target device group.", "mesh/domain/device-group"],
+      linux_installer_url: ["Linux agent URL", "Direct Linux agent download URL. Leave blank when mesh ID can generate it.", "https://rmm.example.com:8443/meshagents?id=6&meshid=..."],
+      linux_install_args: ["Linux install command", "Command run after download. $INSTALLER_PATH is replaced by the downloaded file.", "\"$INSTALLER_PATH\" -install"],
+      linux_insecure_tls: ["Allow insecure Linux download", "Use true only for self-signed MeshCentral TLS during a lab rollout.", "true"],
+      installer_url: ["Windows agent URL", "Direct Windows agent download URL. Leave blank when mesh ID can generate it.", "https://rmm.example.com:8443/meshagents?id=4&meshid=..."],
+      install_args: ["Windows install command", "Command run by PowerShell. {INSTALLER_PATH} is replaced by the downloaded file.", "{INSTALLER_PATH} -fullinstall"],
+    },
+  },
+  zabbix: {
+    service: {
+      url: ["Zabbix API URL", "URL the FizRMM server uses for Zabbix API calls.", "http://zabbix-web:8080/api_jsonrpc.php"],
+    },
+    bootstrap: {
+      server_url: ["Endpoint Zabbix server", "Hostname or IP endpoints use for active checks.", "zabbix.example.com"],
+      linux_installer_url: ["Linux installer URL", "Optional custom installer. Leave blank to use the built-in package installer.", ""],
+      linux_install_args: ["Linux install command", "Optional command for custom installers. $INSTALLER_PATH points at the downloaded file.", ""],
+      installer_url: ["Windows installer URL", "Optional Windows installer package URL.", ""],
+      install_args: ["Windows install command", "Optional silent install command. {INSTALLER_PATH} points at the downloaded file.", ""],
+    },
+  },
+  wazuh: {
+    service: {
+      url: ["Wazuh API URL", "URL the FizRMM server uses to reach the Wazuh manager API.", "https://wazuh-manager:55000"],
+    },
+    bootstrap: {
+      manager_url: ["Endpoint Wazuh manager", "Hostname or IP the agent should enroll/connect to.", "wazuh.example.com"],
+      linux_installer_url: ["Linux installer URL", "Optional custom installer. Leave blank to use distro packages or Arch AUR helpers.", ""],
+      linux_install_args: ["Linux install command", "Optional command for custom installers. $INSTALLER_PATH points at the downloaded file.", ""],
+      installer_url: ["Windows installer URL", "Optional Windows MSI/EXE package URL.", ""],
+      install_args: ["Windows install command", "Optional silent install command. {INSTALLER_PATH} points at the downloaded file.", ""],
+    },
+  },
+  salt: {
+    service: {
+      api_url: ["Salt API URL", "URL the FizRMM server uses for Salt API requests.", "https://salt-master:8000"],
+      url: ["Salt event bus URL", "Internal Salt transport URL when a direct bus connection is used.", "tcp://salt-master:4505"],
+    },
+    bootstrap: {
+      master_url: ["Endpoint Salt master", "Hostname or IP written into each minion config.", "salt.example.com"],
+      linux_installer_url: ["Linux installer URL", "Optional custom installer. Leave blank to use packages, AUR helpers, or Salt bootstrap.", ""],
+      linux_install_args: ["Linux install command", "Optional command for custom installers. $INSTALLER_PATH points at the downloaded file.", ""],
+      installer_url: ["Windows installer URL", "Optional Windows installer package URL.", ""],
+      install_args: ["Windows install command", "Optional silent install command. {INSTALLER_PATH} points at the downloaded file.", ""],
+    },
+  },
+  opensearch: {
+    service: {
+      url: ["OpenSearch URL", "URL the FizRMM server uses for search and indexed telemetry.", "https://opensearch:9200"],
+    },
+  },
+  nats: {
+    service: {
+      url: ["NATS URL", "URL the FizRMM server uses for automation messaging.", "nats://nats:4222"],
+    },
+  },
 };
 
 function headers(orgId, role) {
@@ -558,7 +644,33 @@ function IntegrationsView({ integrations, integrationReady, role, onSetup }) {
 }
 
 function setupFields(integration) {
-  return integration.setup_fields || INTEGRATION_SETUP_FIELDS[integration.id] || { service: [], bootstrap: [] };
+  const fallback = INTEGRATION_SETUP_FIELDS[integration.id] || { service: [], bootstrap: [] };
+  const fields = integration.setup_fields || fallback;
+  return {
+    service: orderSetupFields(integration.id, "service", fields.service || []),
+    bootstrap: orderSetupFields(integration.id, "bootstrap", fields.bootstrap || []),
+  };
+}
+
+function orderSetupFields(integrationId, section, fields) {
+  const preferred = INTEGRATION_SETUP_FIELDS[integrationId]?.[section] || [];
+  return [...fields].sort((left, right) => {
+    const leftIndex = preferred.indexOf(left);
+    const rightIndex = preferred.indexOf(right);
+    if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right);
+    if (leftIndex === -1) return 1;
+    if (rightIndex === -1) return -1;
+    return leftIndex - rightIndex;
+  });
+}
+
+function fieldCopy(integrationId, section, field, value, defaultValue, integration) {
+  const copy = FIELD_COPY[integrationId]?.[section]?.[field];
+  const label = copy?.[0] || field.split("_").map((part) => `${part[0]?.toUpperCase() || ""}${part.slice(1)}`).join(" ");
+  const help = copy?.[1] || (section === "service" ? "Server-side connection value." : "Endpoint enrollment value.");
+  const example = copy?.[2] || "";
+  const placeholder = defaultValue || (field === "url" ? integration.service_url || "" : "") || example;
+  return { label, help, placeholder, hasDefault: Boolean(defaultValue) };
 }
 
 function setupInitialValues(integration) {
@@ -568,6 +680,21 @@ function setupInitialValues(integration) {
     service: Object.fromEntries(fields.service.map((field) => [field, integration.service?.[field] || defaults.service?.[field] || (field === "url" ? integration.service_url || "" : "")])),
     bootstrap: Object.fromEntries(fields.bootstrap.map((field) => [field, integration.bootstrap?.[field] || defaults.bootstrap?.[field] || ""])),
   };
+}
+
+function SetupField({ integration, section, field, value, defaultValue, onChange }) {
+  const copy = fieldCopy(integration.id, section, field, value, defaultValue, integration);
+  return (
+    <label className="setup-field">
+      <span>{copy.label}</span>
+      <input
+        value={value || ""}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={copy.placeholder}
+      />
+      <small>{copy.help}{copy.hasDefault ? ` Default: ${defaultValue}` : ""}</small>
+    </label>
+  );
 }
 
 function setupDefaultValues(integration) {
@@ -641,26 +768,40 @@ function IntegrationCard({ integration, canConfigure, onSetup }) {
         </ol>
       )}
       <form className="integration-setup-form" onSubmit={submit}>
-        {fields.service.map((field) => (
-          <label key={`service-${field}`}>
-            service.{field}
-            <input
-              value={values.service[field] || ""}
-              onChange={(event) => update("service", field, event.target.value)}
-              placeholder={field === "url" ? integration.service_url || "" : field}
-            />
-          </label>
-        ))}
-        {fields.bootstrap.map((field) => (
-          <label key={`bootstrap-${field}`}>
-            bootstrap.{field}
-            <input
-              value={values.bootstrap[field] || ""}
-              onChange={(event) => update("bootstrap", field, event.target.value)}
-              placeholder={field}
-            />
-          </label>
-        ))}
+        {fields.service.length > 0 && (
+          <fieldset>
+            <legend>{INTEGRATION_SETUP_COPY.service.title}</legend>
+            <p>{INTEGRATION_SETUP_COPY.service.body}</p>
+            {fields.service.map((field) => (
+              <SetupField
+                key={`service-${field}`}
+                integration={integration}
+                section="service"
+                field={field}
+                value={values.service[field] || ""}
+                defaultValue={integration.setup_defaults?.service?.[field] || ""}
+                onChange={(value) => update("service", field, value)}
+              />
+            ))}
+          </fieldset>
+        )}
+        {fields.bootstrap.length > 0 && (
+          <fieldset>
+            <legend>{INTEGRATION_SETUP_COPY.bootstrap.title}</legend>
+            <p>{INTEGRATION_SETUP_COPY.bootstrap.body}</p>
+            {fields.bootstrap.map((field) => (
+              <SetupField
+                key={`bootstrap-${field}`}
+                integration={integration}
+                section="bootstrap"
+                field={field}
+                value={values.bootstrap[field] || ""}
+                defaultValue={integration.setup_defaults?.bootstrap?.[field] || ""}
+                onChange={(value) => update("bootstrap", field, value)}
+              />
+            ))}
+          </fieldset>
+        )}
         <div className="setup-actions">
           <button type="submit" disabled={!canConfigure || saving}>
             {saving ? "Saving…" : "Save setup"}
