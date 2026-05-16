@@ -301,10 +301,14 @@ install_salt_builtin() {{
       true
     else
       curl -fsSL https://bootstrap.saltproject.io -o /tmp/bootstrap-salt.sh
+      if ! head -n 1 /tmp/bootstrap-salt.sh | grep -q '^#!'; then
+        echo "Downloaded Salt bootstrap payload is not an executable shell script." >&2
+        return 1
+      fi
       sh /tmp/bootstrap-salt.sh -P stable
     fi
   fi
-  mkdir -p /etc/salt
+  mkdir -p /etc/salt/minion.d
   printf 'master: %s\nid: %s\n' "$master" "$HOSTNAME_VALUE" > /etc/salt/minion.d/fizrmm.conf
   service_enable_now salt-minion
 }}
@@ -320,7 +324,7 @@ install_builtin_agent() {{
   fi
   echo "Installing $agent with the built-in Linux installer." >&2
   set +e
-  "$installer_fn"
+  "$installer_fn" 1>&2
   local rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
@@ -364,9 +368,9 @@ install_agent() {{
     local download_rc=$?
     if [ "$download_rc" -eq 0 ]; then
       if [ -n "$install_args" ]; then
-        INSTALLER_PATH="$target" sh -c "$install_args"
+        INSTALLER_PATH="$target" sh -c "$install_args" 1>&2
       else
-        "$target"
+        "$target" 1>&2
       fi
     fi
     local install_rc=$?
@@ -382,7 +386,17 @@ install_agent() {{
 }}
 
 AGENT_REPORTS="$(
-  python3 -c 'import json,sys; print(json.dumps([json.loads(line) for line in sys.stdin if line.strip()]))' <<EOF
+  python3 -c 'import json,sys
+reports = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        reports.append(json.loads(line))
+    except json.JSONDecodeError:
+        print(f"Ignoring non-JSON installer output while building report: {{line}}", file=sys.stderr)
+print(json.dumps(reports))' <<EOF
 $(install_agent meshcentral 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("meshcentral", {{}}).get("linux_install_args", "")' 'str(data.get("config", {{}}).get("meshcentral", {{}}).get("linux_insecure_tls", "false")).lower()')
 $(install_agent zabbix 'data.get("config", {{}}).get("zabbix", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("zabbix", {{}}).get("linux_install_args", "")' '' install_zabbix_builtin)
 $(install_agent wazuh 'data.get("config", {{}}).get("wazuh", {{}}).get("linux_installer_url", "")' 'data.get("config", {{}}).get("wazuh", {{}}).get("linux_install_args", "")' '' install_wazuh_builtin)

@@ -36,6 +36,9 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("install_zabbix_builtin", script)
         self.assertIn("install_wazuh_builtin", script)
         self.assertIn("install_salt_builtin", script)
+        self.assertIn("mkdir -p /etc/salt/minion.d", script)
+        self.assertIn("Downloaded Salt bootstrap payload is not an executable shell script.", script)
+        self.assertIn("Ignoring non-JSON installer output while building report", script)
 
     def test_rendered_linux_bootstrap_runs_against_api(self):
         import os
