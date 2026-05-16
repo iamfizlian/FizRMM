@@ -695,6 +695,22 @@ function IntegrationsView({ integrations, integrationReady, role, onSetup }) {
         <strong>How to read this page</strong>
         <span>For a first working deployment, fill the recommended fields shown on each card and use defaults. Open advanced installer overrides only when you host your own agent packages.</span>
       </div>
+      {blocked.length > 0 && (
+        <section className="readiness-next">
+          <div>
+            <strong>Setup tasks still required</strong>
+            <span>These are the items behind the readiness count. Complete them here, then use Save and run setup on each matching card.</span>
+          </div>
+          <ol>
+            {blocked.map((integration) => (
+              <li key={integration.id}>
+                <strong>{integration.name}</strong>
+                <span>{setupActionSummary(integration).join(" ")}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       <div className="integration-grid expanded">
         {integrations.map((integration) => (
           <IntegrationCard
@@ -805,6 +821,28 @@ function IntegrationFieldSummary({ integration }) {
   );
 }
 
+function requirementLabel(integration, section, requirement) {
+  return String(requirement)
+    .split(" or ")
+    .map((field) => fieldCopy(integration.id, section, field, "", "", integration).label)
+    .join(" or ");
+}
+
+function setupActionSummary(integration) {
+  const required = integrationRequiredFields(integration);
+  const actions = [];
+  if (required.service.length > 0) {
+    actions.push(`Fill ${required.service.map((field) => requirementLabel(integration, "service", field)).join(", ")}.`);
+  }
+  if (required.bootstrap.length > 0) {
+    actions.push(`Fill ${required.bootstrap.map((field) => requirementLabel(integration, "bootstrap", field)).join(", ")}.`);
+  }
+  if (!integration.initialized) {
+    actions.push("Run its setup task.");
+  }
+  return actions.length ? actions : ["Review this subsystem before enrolling endpoints."];
+}
+
 function recommendedFields(integration, section) {
   const fields = setupFields(integration)[section];
   const common = INTEGRATION_GUIDANCE[integration.id]?.common?.[section] || [];
@@ -892,7 +930,7 @@ function IntegrationCard({ integration, canConfigure, onSetup }) {
   }
 
   return (
-    <div className={`integration-card ${integration.configured ? "configured" : "missing"}`}>
+    <div className={`integration-card ${integration.setup_required ? "needs-setup" : integration.configured ? "configured" : "missing"}`}>
       <div className="integration-card-header">
         <div>
           <strong>{integration.name}</strong>
@@ -908,9 +946,15 @@ function IntegrationCard({ integration, canConfigure, onSetup }) {
       )}
       <IntegrationFieldSummary integration={integration} />
       {guide.note && <small>{guide.note}</small>}
-      {integration.missing?.length > 0 && <small>Missing service config: {integration.missing.join(", ")}</small>}
-      {integration.bootstrap_missing?.length > 0 && <small>Endpoint bootstrap needs: {integration.bootstrap_missing.join(", ")}</small>}
-      {integration.init?.message && <small>Setup task: {integration.init.message}</small>}
+      {integration.setup_required && (
+        <div className="setup-required">
+          <strong>Needs setup</strong>
+          <ul>
+            {setupActionSummary(integration).map((action) => <li key={action}>{action}</li>)}
+          </ul>
+          {integration.init?.message && <span>Last setup task: {integration.init.message}</span>}
+        </div>
+      )}
       {integration.setup_required && integration.setup_steps?.length > 0 && (
         <ol className="setup-steps">
           {integration.setup_steps.map((step) => <li key={step}>{step}</li>)}

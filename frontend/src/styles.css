@@ -359,6 +359,12 @@ button {
   background: #f3fbf7;
 }
 
+.integration-card.needs-setup {
+  border-color: #c47f24;
+  background: #fff8ea;
+  box-shadow: inset 0 0 0 1px #efd19b;
+}
+
 .integration-card.missing {
   border-color: #d8b86d;
   background: #fffaf0;
@@ -418,6 +424,51 @@ button {
   line-height: 1.45;
 }
 
+.readiness-next {
+  background: #fff8ea;
+  border: 1px solid #c47f24;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.readiness-next > div {
+  display: grid;
+  gap: 4px;
+}
+
+.readiness-next strong {
+  color: #1d2d33;
+}
+
+.readiness-next span {
+  color: #4f6068;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.readiness-next ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.readiness-next li {
+  color: #31464f;
+  line-height: 1.4;
+}
+
+.readiness-next li strong {
+  display: inline;
+  margin-right: 6px;
+}
+
+.readiness-next li span {
+  display: inline;
+}
+
 .integration-fill-guide {
   display: grid;
   gap: 6px;
@@ -467,6 +518,35 @@ button {
   font-size: 13px;
   line-height: 1.45;
   text-transform: none;
+}
+
+.setup-required {
+  background: #ffffff;
+  border: 1px solid #c47f24;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.setup-required strong {
+  color: #8a4b00;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.setup-required ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.setup-required li,
+.setup-required span {
+  color: #31464f;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .advanced-setup {
