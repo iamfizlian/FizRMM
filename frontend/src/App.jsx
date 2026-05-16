@@ -622,12 +622,33 @@ function AutomationView({ selectedAsset, scripts, lastAction, onScript }) {
 }
 
 function IntegrationsView({ integrations, integrationReady, role, onSetup }) {
+  const configured = integrations.filter((integration) => integration.configured).length;
+  const initialized = integrations.filter((integration) => integration.initialized).length;
+  const blocked = integrations.filter((integration) => integration.setup_required);
   return (
     <div className="workflow-panel">
       <div>
         <p className="eyebrow">Integration readiness</p>
         <h2>{integrationReady ? "Ready for real endpoints" : "Subsystem configuration needed"}</h2>
-        <p className="muted">Use these setup forms to save the service URLs and bootstrap values FizRMM needs before enrolling production endpoints.</p>
+        <p className="muted">Each subsystem has two jobs: FizRMM must know how to reach the service, and new endpoints must know where to enroll their agents.</p>
+      </div>
+      <section className={`readiness-summary ${integrationReady ? "ready" : "attention"}`}>
+        <div>
+          <strong>{configured}/{integrations.length}</strong>
+          <span>services configured</span>
+        </div>
+        <div>
+          <strong>{initialized}/{integrations.length}</strong>
+          <span>setup tasks initialized</span>
+        </div>
+        <div>
+          <strong>{blocked.length}</strong>
+          <span>items need attention</span>
+        </div>
+      </section>
+      <div className="readiness-help">
+        <strong>How to read this page</strong>
+        <span>Control plane fields are for the FizRMM server. Endpoint bootstrap fields are written into future bootstrap scripts. Blank optional installer fields mean the built-in installer path will be used when supported.</span>
       </div>
       <div className="integration-grid expanded">
         {integrations.map((integration) => (
@@ -706,6 +727,39 @@ function setupDefaultValues(integration) {
   };
 }
 
+function integrationRequiredFields(integration) {
+  const fields = setupFields(integration);
+  const service = new Set(integration.missing || []);
+  const bootstrap = new Set(integration.bootstrap_missing || []);
+  return {
+    service: fields.service.filter((field) => service.has(field)),
+    bootstrap: fields.bootstrap.filter((field) => bootstrap.has(field) || bootstrap.has(`${field} or linux_installer_url`)),
+  };
+}
+
+function IntegrationFieldSummary({ integration }) {
+  const fields = setupFields(integration);
+  const required = integrationRequiredFields(integration);
+  const primaryService = required.service.length ? required.service : fields.service.slice(0, 2);
+  const primaryBootstrap = required.bootstrap.length ? required.bootstrap : fields.bootstrap.slice(0, 3);
+  return (
+    <div className="integration-fill-guide">
+      {primaryService.length > 0 && (
+        <div>
+          <strong>Control plane</strong>
+          <span>{primaryService.map((field) => fieldCopy(integration.id, "service", field, "", "", integration).label).join(", ")}</span>
+        </div>
+      )}
+      {primaryBootstrap.length > 0 && (
+        <div>
+          <strong>Endpoint bootstrap</strong>
+          <span>{primaryBootstrap.map((field) => fieldCopy(integration.id, "bootstrap", field, "", "", integration).label).join(", ")}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function IntegrationCard({ integration, canConfigure, onSetup }) {
   const fields = setupFields(integration);
   const [values, setValues] = useState(() => setupInitialValues(integration));
@@ -756,9 +810,14 @@ function IntegrationCard({ integration, canConfigure, onSetup }) {
 
   return (
     <div className={`integration-card ${integration.configured ? "configured" : "missing"}`}>
-      <strong>{integration.name}</strong>
-      <span>{integration.state}</span>
-      <small>{integration.summary}</small>
+      <div className="integration-card-header">
+        <div>
+          <strong>{integration.name}</strong>
+          <small>{integration.summary}</small>
+        </div>
+        <span>{integration.state}</span>
+      </div>
+      <IntegrationFieldSummary integration={integration} />
       {integration.missing?.length > 0 && <small>Missing service config: {integration.missing.join(", ")}</small>}
       {integration.bootstrap_missing?.length > 0 && <small>Endpoint bootstrap needs: {integration.bootstrap_missing.join(", ")}</small>}
       {integration.init?.message && <small>Setup task: {integration.init.message}</small>}

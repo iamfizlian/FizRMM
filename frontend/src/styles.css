@@ -302,6 +302,8 @@ button {
   border: 1px solid #dbe3e1;
   border-radius: 8px;
   background: #fbfcfc;
+  display: grid;
+  gap: 10px;
   padding: 12px;
   min-width: 0;
 }
@@ -328,10 +330,28 @@ button {
   font-size: 13px;
 }
 
-.integration-card span {
+.integration-card-header {
+  align-items: start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.integration-card-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.integration-card-header span {
+  background: #eef4f3;
+  border: 1px solid #d4dfdc;
+  border-radius: 999px;
   color: #60717a;
   font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .integration-card.configured {
@@ -346,6 +366,81 @@ button {
 
 .integration-card small {
   color: #4f6068;
+}
+
+.readiness-summary {
+  border: 1px solid #dbe3e1;
+  border-radius: 8px;
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.readiness-summary.attention {
+  border-color: #d8b86d;
+}
+
+.readiness-summary.ready {
+  border-color: #79b99b;
+}
+
+.readiness-summary div {
+  background: #fbfcfc;
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+}
+
+.readiness-summary strong {
+  color: #1d2d33;
+  font-size: 22px;
+}
+
+.readiness-summary span {
+  color: #60717a;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.readiness-help {
+  background: #eef4f3;
+  border: 1px solid #d4dfdc;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.readiness-help span {
+  color: #4f6068;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.integration-fill-guide {
+  display: grid;
+  gap: 6px;
+}
+
+.integration-fill-guide div {
+  background: #ffffff;
+  border: 1px solid #dbe3e1;
+  border-radius: 6px;
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+}
+
+.integration-fill-guide strong {
+  color: #31464f;
+  font-size: 12px;
+}
+
+.integration-fill-guide span {
+  color: #60717a;
+  font-size: 12px;
+  text-transform: none;
 }
 
 .script-bar {
@@ -575,7 +670,8 @@ button {
 @media (max-width: 980px) {
   .form-grid,
   .script-grid,
-  .integration-grid.expanded {
+  .integration-grid.expanded,
+  .readiness-summary {
     grid-template-columns: 1fr;
   }
 }
