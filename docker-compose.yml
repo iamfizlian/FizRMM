@@ -94,13 +94,18 @@ services:
 
   keycloak:
     profiles: ["integrations"]
-    image: quay.io/keycloak/keycloak:latest
-    command: ["start-dev"]
+    build:
+      context: .
+      dockerfile: deploy/keycloak/Dockerfile
+    image: fizrmm-keycloak:latest
+    command: ["start", "--optimized"]
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
     ports:
       - "8080:8080"
     depends_on:

@@ -126,6 +126,7 @@ run_app() {
   COMPOSE_PARALLEL_LIMIT=1 compose build api
   COMPOSE_PARALLEL_LIMIT=1 compose build portal
   COMPOSE_PARALLEL_LIMIT=1 compose build salt-master
+  COMPOSE_PARALLEL_LIMIT=1 compose build keycloak
   if ! COMPOSE_PARALLEL_LIMIT=1 compose up --build -d; then
     echo
     echo "FizRMM startup failed during Docker Compose startup."
