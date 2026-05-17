@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fizrmm.api import configure_integration, deployment_config, integration_status
+from fizrmm.api import apply_meshcentral_agent_defaults, configure_integration, deployment_config, integration_status
 from fizrmm.models import TenantContext
 
 
@@ -56,6 +56,7 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
             os.environ[key] = ""
         with tempfile.TemporaryDirectory() as directory:
             os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(Path(directory) / "missing-runtime.json")
+            os.environ["FIZRMM_PUBLIC_URL"] = "http://164.152.27.91:8000"
 
             status = integration_status()
             config = deployment_config()
@@ -68,9 +69,9 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
             self.assertEqual(integrations[integration_id]["missing"], [])
         self.assertEqual(integrations["identity"]["service_url"], "http://keycloak:8080")
         self.assertEqual(integrations["zabbix"]["service_url"], "http://zabbix-web:8080/api_jsonrpc.php")
-        self.assertEqual(config["zabbix"]["server_url"], "127.0.0.1")
-        self.assertEqual(config["wazuh"]["manager_url"], "127.0.0.1")
-        self.assertEqual(config["salt"]["master_url"], "127.0.0.1")
+        self.assertEqual(config["zabbix"]["server_url"], "164.152.27.91")
+        self.assertEqual(config["wazuh"]["manager_url"], "164.152.27.91")
+        self.assertEqual(config["salt"]["master_url"], "164.152.27.91")
         self.assertEqual(integrations["meshcentral"]["bootstrap_missing"], [])
         self.assertFalse(integrations["meshcentral"]["setup_required"])
         self.assertIn("meshagents?id=6", config["meshcentral"]["linux_installer_url"])
@@ -154,6 +155,36 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
         meshcentral = next(item for item in status["integrations"] if item["id"] == "meshcentral")
         self.assertEqual(meshcentral["bootstrap_missing"], [])
         self.assertIn("https://164.152.27.91:8443/meshagents?id=6", meshcentral["bootstrap"]["linux_installer_url"])
+
+    def test_meshcentral_internal_runtime_url_is_replaced_for_endpoint_bootstrap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "integrations.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "integrations": {
+                            "meshcentral": {
+                                "service": {"url": "https://meshcentral:443"},
+                                "bootstrap": {
+                                    "server_url": "https://meshcentral:443",
+                                    "linux_installer_url": "http://meshcentral:443/meshagents?id=6&installflags=0",
+                                },
+                                "init": {"status": "configured", "service_reachable": True},
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(path)
+            config = deployment_config()
+
+            apply_meshcentral_agent_defaults(config, "http://164.152.27.91:8000")
+
+        meshcentral = config["meshcentral"]
+        self.assertEqual(meshcentral["server_url"], "https://164.152.27.91:8443")
+        self.assertIn("https://164.152.27.91:8443/meshagents?id=6", meshcentral["linux_installer_url"])
+        self.assertNotIn("meshcentral:443", meshcentral["linux_installer_url"])
 
 
     def test_setup_api_can_run_deployment_task_from_portal(self):

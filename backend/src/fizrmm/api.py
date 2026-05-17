@@ -26,10 +26,29 @@ def request_base_url(headers: Any) -> str:
     return f"{proto}://{host}".rstrip("/")
 
 
+INTERNAL_HOSTNAMES = {
+    "",
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "api",
+    "keycloak",
+    "meshcentral",
+    "nats",
+    "opensearch",
+    "postgres",
+    "salt-master",
+    "wazuh-manager",
+    "zabbix-postgres",
+    "zabbix-server",
+    "zabbix-web",
+}
+
+
 def is_local_or_internal_url(value: object) -> bool:
     parsed = urlparse(str(value or ""))
     hostname = (parsed.hostname or "").lower()
-    return hostname in {"", "localhost", "127.0.0.1", "0.0.0.0", "api"}
+    return hostname in INTERNAL_HOSTNAMES
 
 
 def public_portal_url(headers: Any, stored_url: object = "") -> str:
