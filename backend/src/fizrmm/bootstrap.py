@@ -353,6 +353,33 @@ install_builtin_agent() {{
   agent_report "$agent" "$status"
 }}
 
+install_downloaded_agent() {{
+  local installer_url="$1"
+  local target="$2"
+  local install_args="$3"
+  local url_path="${{installer_url%%\\?*}}"
+  if [ -n "$install_args" ]; then
+    INSTALLER_PATH="$target" sh -c "$install_args"
+  elif [[ "$url_path" == *.pkg.tar.zst ]] || [[ "$url_path" == *.pkg.tar.xz ]] || [[ "$url_path" == *.pkg.tar.gz ]]; then
+    pacman -U --noconfirm "$target"
+  elif [[ "$url_path" == *.deb ]]; then
+    dpkg -i "$target" || apt-get install -f -y -qq
+  elif [[ "$url_path" == *.rpm ]]; then
+    if command -v dnf >/dev/null 2>&1; then
+      dnf install -y -q "$target"
+    elif command -v yum >/dev/null 2>&1; then
+      yum install -y -q "$target"
+    elif command -v zypper >/dev/null 2>&1; then
+      zypper --quiet --non-interactive install "$target"
+    else
+      rpm -Uvh "$target"
+    fi
+  else
+    chmod +x "$target"
+    "$target"
+  fi
+}}
+
 install_agent() {{
   local agent="$1"
   local url_expr="$2"
@@ -383,14 +410,10 @@ install_agent() {{
       curl_flags="-fkL"
     fi
     set +e
-    curl $curl_flags "$installer_url" -o "$target" >> "$LOG_FILE" 2>&1 && chmod +x "$target"
+    curl $curl_flags "$installer_url" -o "$target" >> "$LOG_FILE" 2>&1
     local download_rc=$?
     if [ "$download_rc" -eq 0 ]; then
-      if [ -n "$install_args" ]; then
-        INSTALLER_PATH="$target" sh -c "$install_args" >> "$LOG_FILE" 2>&1
-      else
-        "$target" >> "$LOG_FILE" 2>&1
-      fi
+      install_downloaded_agent "$installer_url" "$target" "$install_args" >> "$LOG_FILE" 2>&1
     fi
     local install_rc=$?
     set -e

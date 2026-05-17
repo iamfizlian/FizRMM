@@ -49,6 +49,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("tail -n 20", script)
         self.assertIn("apt-get -qq update", script)
         self.assertIn("pacman -Sy --needed --noconfirm", script)
+        self.assertIn("install_downloaded_agent", script)
+        self.assertIn("*.pkg.tar.zst", script)
+        self.assertIn('pacman -U --noconfirm "$target"', script)
+        self.assertIn('dpkg -i "$target"', script)
+        self.assertIn("*.rpm", script)
 
     def test_rendered_linux_bootstrap_runs_against_api(self):
         import os
