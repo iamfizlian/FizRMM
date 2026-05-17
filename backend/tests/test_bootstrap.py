@@ -36,13 +36,19 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("install_zabbix_builtin", script)
         self.assertIn("install_wazuh_builtin", script)
         self.assertIn("install_salt_builtin", script)
-        self.assertIn("aur_install wazuh-agent", script)
-        self.assertIn("aur_install salt", script)
-        self.assertIn("paru", script)
         self.assertIn("mkdir -p /etc/salt/minion.d", script)
         self.assertIn("Salt minion was not installed by any supported installer path.", script)
-        self.assertIn("Downloaded Salt bootstrap payload is not an executable shell script.", script)
+        self.assertIn("No precompiled Wazuh agent package is configured", script)
+        self.assertIn("No precompiled Salt minion package is configured", script)
+        self.assertNotIn("aur_install", script)
+        self.assertNotIn("bootstrap.saltproject.io", script)
         self.assertIn("Ignoring non-JSON installer output while building report", script)
+        self.assertIn("FIZRMM_BOOTSTRAP_LOG", script)
+        self.assertIn("Detailed installer log:", script)
+        self.assertIn("FizRMM agent install summary:", script)
+        self.assertIn("tail -n 20", script)
+        self.assertIn("apt-get -qq update", script)
+        self.assertIn("pacman -Sy --needed --noconfirm", script)
 
     def test_rendered_linux_bootstrap_runs_against_api(self):
         import os

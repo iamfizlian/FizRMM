@@ -157,10 +157,25 @@ OS_VALUE="$(. /etc/os-release 2>/dev/null && echo "${{PRETTY_NAME:-Linux}}" || u
 CLAIM_BODY="$(python3 -c 'import json,sys; print(json.dumps({{"hostname": sys.argv[1], "operating_system": sys.argv[2]}}))' "$HOSTNAME_VALUE" "$OS_VALUE")"
 CLAIM_RESPONSE="$(json_post "/api/enrollments/$ENROLLMENT_TOKEN/claim" "$CLAIM_BODY")"
 ASSET_ID="$(printf '%s' "$CLAIM_RESPONSE" | json_get 'data.get("asset_id", "")')"
+LOG_FILE="${{FIZRMM_BOOTSTRAP_LOG:-/var/log/fizrmm-bootstrap-${{ASSET_ID:-unknown}}.log}}"
+mkdir -p "$(dirname "$LOG_FILE")"
+touch "$LOG_FILE"
 
 echo "Claimed FizRMM enrollment for asset $ASSET_ID"
+echo "Detailed installer log: $LOG_FILE"
 
 INSTALL_BUILTIN_AGENTS="${{FIZRMM_INSTALL_BUILTIN_AGENTS:-true}}"
+
+log_step() {{
+  printf '[FizRMM] %s\n' "$*" >&2
+  printf '[%s] %s\n' "$(date -Is 2>/dev/null || date)" "$*" >> "$LOG_FILE"
+}}
+
+log_error_tail() {{
+  local agent="$1"
+  echo "[FizRMM] $agent failed. Last installer log lines:"
+  tail -n 20 "$LOG_FILE" | sed 's/^/[FizRMM log] /'
+}}
 
 agent_report() {{
   python3 -c 'import json,sys; print(json.dumps({{"agent": sys.argv[1], "status": sys.argv[2], "version": "unknown", "external_id": f"{{sys.argv[1]}}:{{sys.argv[3]}}"}}))' "$1" "$2" "$HOSTNAME_VALUE"
@@ -178,42 +193,19 @@ service_enable_now() {{
 package_install() {{
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y "$@"
+    apt-get -qq update
+    apt-get install -y -qq "$@"
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y "$@"
+    dnf install -y -q "$@"
   elif command -v yum >/dev/null 2>&1; then
-    yum install -y "$@"
+    yum install -y -q "$@"
   elif command -v zypper >/dev/null 2>&1; then
-    zypper --non-interactive install "$@"
+    zypper --quiet --non-interactive install "$@"
   elif command -v pacman >/dev/null 2>&1; then
-    pacman -Sy --noconfirm "$@"
+    pacman -Sy --needed --noconfirm "$@"
   else
     echo "No supported package manager found for $*" >&2
     return 1
-  fi
-}}
-
-aur_install() {{
-  local package="$1"
-  local helper=""
-  local aur_user="${{SUDO_USER:-}}"
-  if [ -z "$aur_user" ] || [ "$aur_user" = "root" ]; then
-    echo "AUR install for $package requires running the bootstrap through sudo from a non-root user." >&2
-    return 1
-  fi
-  if command -v paru >/dev/null 2>&1; then
-    helper="$(command -v paru)"
-  elif command -v yay >/dev/null 2>&1; then
-    helper="$(command -v yay)"
-  else
-    echo "No supported AUR helper found for $package; install paru/yay or provide an explicit Linux installer URL." >&2
-    return 1
-  fi
-  if command -v runuser >/dev/null 2>&1; then
-    runuser -u "$aur_user" -- "$helper" -S --needed --noconfirm "$package"
-  else
-    sudo -u "$aur_user" "$helper" -S --needed --noconfirm "$package"
   fi
 }}
 
@@ -283,10 +275,8 @@ REPO
       else
         WAZUH_MANAGER="$manager" yum install -y wazuh-agent
       fi
-    elif command -v pacman >/dev/null 2>&1 && aur_install wazuh-agent; then
-      true
     else
-      echo "Wazuh publishes official Linux agent packages for apt/yum/dnf systems; this package manager is not supported automatically." >&2
+      echo "No precompiled Wazuh agent package is configured for this distribution. Set WAZUH_LINUX_AGENT_INSTALLER_URL to a prebuilt package or installer." >&2
       return 1
     fi
   fi
@@ -324,15 +314,9 @@ install_salt_builtin() {{
   if ! command -v salt-minion >/dev/null 2>&1; then
     if package_install salt-minion || package_install salt; then
       true
-    elif command -v pacman >/dev/null 2>&1 && aur_install salt; then
-      true
     else
-      curl -fsSL https://bootstrap.saltproject.io -o /tmp/bootstrap-salt.sh
-      if ! head -n 1 /tmp/bootstrap-salt.sh | grep -q '^#!'; then
-        echo "Downloaded Salt bootstrap payload is not an executable shell script." >&2
-        return 1
-      fi
-      sh /tmp/bootstrap-salt.sh -P stable
+      echo "No precompiled Salt minion package is configured for this distribution. Set SALT_LINUX_MINION_INSTALLER_URL to a prebuilt package or installer." >&2
+      return 1
     fi
   fi
   if ! command -v salt-minion >/dev/null 2>&1; then
@@ -349,19 +333,22 @@ install_builtin_agent() {{
   local installer_fn="$2"
   local status
   if [ "$INSTALL_BUILTIN_AGENTS" != "true" ]; then
-    echo "Skipping $agent built-in installer because FIZRMM_INSTALL_BUILTIN_AGENTS=$INSTALL_BUILTIN_AGENTS." >&2
+    log_step "Skipping $agent built-in installer because FIZRMM_INSTALL_BUILTIN_AGENTS=$INSTALL_BUILTIN_AGENTS."
     agent_report "$agent" "skipped_builtin_disabled"
     return 0
   fi
-  echo "Installing $agent with the built-in Linux installer." >&2
+  log_step "Installing $agent with the built-in Linux installer."
   set +e
-  "$installer_fn" 1>&2
+  "$installer_fn" >> "$LOG_FILE" 2>&1
   local rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
     status="installed"
+    log_step "$agent installed."
   else
     status="failed_install"
+    log_step "$agent failed with exit code $rc."
+    log_error_tail "$agent" >&2
   fi
   agent_report "$agent" "$status"
 }}
@@ -385,31 +372,35 @@ install_agent() {{
       install_builtin_agent "$agent" "$builtin_fn"
       return 0
     fi
-    echo "Skipping $agent because no Linux installer URL was provided by the portal." >&2
+    log_step "Skipping $agent because no Linux installer URL was provided by the portal."
     status="skipped_no_installer_url"
   else
     target="/tmp/fizrmm-$agent-installer"
-    echo "Downloading $agent from $installer_url" >&2
+    log_step "Downloading $agent installer."
+    printf '[%s] %s installer URL: %s\n' "$(date -Is 2>/dev/null || date)" "$agent" "$installer_url" >> "$LOG_FILE"
     curl_flags="-fL"
     if [ "$insecure_tls" = "true" ]; then
       curl_flags="-fkL"
     fi
     set +e
-    curl $curl_flags "$installer_url" -o "$target" && chmod +x "$target"
+    curl $curl_flags "$installer_url" -o "$target" >> "$LOG_FILE" 2>&1 && chmod +x "$target"
     local download_rc=$?
     if [ "$download_rc" -eq 0 ]; then
       if [ -n "$install_args" ]; then
-        INSTALLER_PATH="$target" sh -c "$install_args" 1>&2
+        INSTALLER_PATH="$target" sh -c "$install_args" >> "$LOG_FILE" 2>&1
       else
-        "$target" 1>&2
+        "$target" >> "$LOG_FILE" 2>&1
       fi
     fi
     local install_rc=$?
     set -e
     if [ "$download_rc" -eq 0 ] && [ "$install_rc" -eq 0 ]; then
       status="installed"
+      log_step "$agent installed."
     else
       status="failed_install"
+      log_step "$agent failed. download_rc=$download_rc install_rc=$install_rc."
+      log_error_tail "$agent" >&2
     fi
   fi
 
@@ -439,5 +430,11 @@ REPORT_BODY="$(python3 -c 'import json,sys; print(json.dumps({{"agents": json.lo
 REPORT_RESPONSE="$(json_post "/api/enrollments/$ENROLLMENT_TOKEN/report" "$REPORT_BODY")"
 REPORTED_COUNT="$(printf '%s' "$REPORT_RESPONSE" | json_get 'data.get("agents_reported", "")')"
 
+echo "FizRMM agent install summary:"
+printf '%s' "$AGENT_REPORTS" | python3 -c 'import json,sys
+for item in json.load(sys.stdin):
+    print("  - {{}}: {{}}".format(item.get("agent", "unknown"), item.get("status", "unknown")))
+'
+echo "Detailed installer log: $LOG_FILE"
 echo "FizRMM Linux bootstrap complete for asset $ASSET_ID. Agents reported: $REPORTED_COUNT"
 """
