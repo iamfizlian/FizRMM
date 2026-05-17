@@ -207,7 +207,7 @@ run_app() {
 
   echo
   echo "Starting FizRMM API and portal."
-  if ! compose_step "Starting API and portal containers." up --no-build -d api portal; then
+  if ! compose_step "Starting API and portal containers." up --no-build --no-deps -d api portal; then
     echo
     echo "FizRMM startup failed while starting API and portal."
     doctor || true
