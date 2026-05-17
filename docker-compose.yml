@@ -127,7 +127,8 @@ services:
       discovery.type: single-node
       compatibility.override_main_response_version: "true"
       cluster.routing.allocation.disk.threshold_enabled: "false"
-      plugins.security.disabled: "false"
+      plugins.security.disabled: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
       OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-FizRMM-dev-password-1!}
       OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
     ports:
@@ -225,7 +226,7 @@ services:
     image: wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}
     hostname: wazuh-manager
     environment:
-      INDEXER_URL: https://opensearch:9200
+      INDEXER_URL: http://opensearch:9200
       INDEXER_USERNAME: ${WAZUH_INDEXER_USERNAME:-admin}
       INDEXER_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-FizRMM-dev-password-1!}
       FILEBEAT_SSL_VERIFICATION_MODE: none
