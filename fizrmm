@@ -37,6 +37,24 @@ require_docker() {
   fi
 }
 
+require_docker_disk_space() {
+  local min_mb="${FIZRMM_MIN_DOCKER_FREE_MB:-8192}"
+  local docker_root available_mb
+  docker_root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+  docker_root="${docker_root:-/var/lib/docker}"
+  if [ ! -e "$docker_root" ]; then
+    docker_root="/"
+  fi
+  available_mb="$(df -Pm "$docker_root" | awk 'NR == 2 { print $4 }')"
+  if [ -n "$available_mb" ] && [ "$available_mb" -lt "$min_mb" ]; then
+    echo "Docker does not have enough free disk space to start the full FizRMM stack." >&2
+    echo "Docker root: $docker_root" >&2
+    echo "Available: ${available_mb}MB; required: ${min_mb}MB." >&2
+    echo "Free space on the Docker host, then rerun ./fizrmm." >&2
+    return 1
+  fi
+}
+
 pull_if_possible() {
   if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git pull --ff-only
@@ -103,6 +121,7 @@ doctor() {
 run_app() {
   require_docker
   pull_if_possible
+  require_docker_disk_space
   compose down --remove-orphans
   COMPOSE_PARALLEL_LIMIT=1 compose build api
   COMPOSE_PARALLEL_LIMIT=1 compose build portal
