@@ -283,6 +283,17 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
         self.assertIn("https://164.152.27.91:8443/meshagents?id=6", defaults["linux_installer_url"])
         self.assertIn("meshid=mesh%2Fdomain%2Fexample%20id", defaults["linux_installer_url"])
 
+    def test_loopback_portal_url_does_not_generate_meshcentral_installer_url(self):
+        import os
+        from fizrmm.api import meshcentral_installer_defaults
+
+        os.environ["MESHCENTRAL_MESH_ID"] = "mesh/domain/default"
+
+        defaults = meshcentral_installer_defaults("http://127.0.0.1:8000")
+
+        self.assertEqual(defaults["linux_installer_url"], "")
+        self.assertEqual(defaults["installer_url"], "")
+
     def test_claim_response_fills_meshcentral_defaults_for_existing_enrollment(self):
         import os
         import urllib.request
@@ -321,6 +332,51 @@ class MeshCentralInstallerDefaultTests(unittest.TestCase):
         meshcentral = payload["config"]["meshcentral"]
         self.assertIn("https://164.152.27.91:8443/meshagents?id=6", meshcentral["linux_installer_url"])
         self.assertEqual(meshcentral["linux_install_args"], '"$INSTALLER_PATH" -install')
+
+    def test_claim_response_replaces_existing_loopback_meshcentral_url(self):
+        import os
+        import urllib.request
+        import json
+        import threading
+        import time
+
+        from fizrmm.api import make_server
+
+        os.environ["MESHCENTRAL_MESH_ID"] = "mesh/domain/default"
+        store = seed_store()
+        enrollment = store.create_enrollment(
+            TenantContext(user_id="tech", allowed_org_ids=("org_acme",)),
+            "org_acme",
+            "Acme HQ",
+            {
+                "portal_url": "http://127.0.0.1:8000",
+                "meshcentral": {
+                    "linux_installer_url": "https://127.0.0.1:8443/meshagents?id=6&installflags=0",
+                    "server_url": "https://127.0.0.1:8443",
+                },
+            },
+            "2099-01-01T00:00:00+00:00",
+        )
+        server = make_server("127.0.0.1", 8771, store)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        time.sleep(0.05)
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:8771/api/enrollments/{enrollment['token']}/claim",
+                data=json.dumps({"hostname": "host1", "operating_system": "Linux"}).encode("utf-8"),
+                headers={"Content-Type": "application/json", "Host": "164.152.27.91:5173"},
+                method="POST",
+            )
+            payload = json.loads(urllib.request.urlopen(request, timeout=2).read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        meshcentral = payload["config"]["meshcentral"]
+        self.assertIn("https://164.152.27.91:8443/meshagents?id=6", meshcentral["linux_installer_url"])
+        self.assertEqual(meshcentral["server_url"], "https://164.152.27.91:8443")
 
     def test_explicit_meshcentral_requirement_rejects_missing_agent_configuration(self):
         import json

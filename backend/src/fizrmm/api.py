@@ -47,6 +47,8 @@ def env_value(name: str, default: str = "") -> str:
 
 
 def public_url_with_port(base_url: str, port: int, scheme: str = "https") -> str:
+    if is_local_or_internal_url(base_url):
+        return ""
     parsed = urlparse(base_url)
     if not parsed.hostname:
         return ""
@@ -120,8 +122,14 @@ def apply_meshcentral_agent_defaults(config: dict[str, object], portal_url: str)
     meshcentral["mesh_id"] = mesh_id
     defaults = meshcentral_installer_defaults(portal_url, mesh_id)
     for key, value in defaults.items():
-        meshcentral[key] = str(meshcentral.get(key) or value)
-    meshcentral["server_url"] = str(meshcentral.get("server_url") or meshcentral_public_url(portal_url))
+        current = str(meshcentral.get(key) or "")
+        if key.endswith("_installer_url") and is_local_or_internal_url(current):
+            current = ""
+        meshcentral[key] = current or str(value)
+    current_server_url = str(meshcentral.get("server_url") or "")
+    if is_local_or_internal_url(current_server_url):
+        current_server_url = ""
+    meshcentral["server_url"] = current_server_url or meshcentral_public_url(portal_url)
 
 
 def meshcentral_agent_required_by_runtime() -> bool:
