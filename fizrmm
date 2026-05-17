@@ -67,6 +67,21 @@ compose() {
   docker compose -f "$APP_COMPOSE_FILE" --profile integrations "$@"
 }
 
+compose_step() {
+  local label="$1"
+  shift
+  local log_file="/tmp/fizrmm-compose-$$.log"
+  echo "$label"
+  if COMPOSE_PARALLEL_LIMIT=1 compose "$@" >"$log_file" 2>&1; then
+    rm -f "$log_file"
+    return 0
+  fi
+  echo "$label failed."
+  cat "$log_file" >&2
+  rm -f "$log_file"
+  return 1
+}
+
 doctor() {
   require_docker
   echo "Container status:"
@@ -122,14 +137,14 @@ run_app() {
   require_docker
   pull_if_possible
   require_docker_disk_space
-  compose down --remove-orphans
-  COMPOSE_PARALLEL_LIMIT=1 compose build api
-  COMPOSE_PARALLEL_LIMIT=1 compose build portal
-  COMPOSE_PARALLEL_LIMIT=1 compose build salt-master
-  COMPOSE_PARALLEL_LIMIT=1 compose build keycloak
+  compose_step "Stopping old FizRMM containers." down --remove-orphans
+  compose_step "Building FizRMM API image." build api
+  compose_step "Building FizRMM portal image." build portal
+  compose_step "Building FizRMM Salt image." build salt-master
+  compose_step "Building FizRMM Keycloak image." build keycloak
 
   echo "Starting FizRMM integration services."
-  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --build -d \
+  if ! compose_step "Starting integration containers." up --build -d \
     postgres \
     keycloak \
     nats \
@@ -148,7 +163,7 @@ run_app() {
 
   echo
   echo "Running FizRMM integration initialization."
-  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --no-build fizrmm-init; then
+  if ! compose_step "Starting integration initializer." up --no-build -d fizrmm-init; then
     echo
     echo "FizRMM startup failed during integration initialization."
     doctor || true
@@ -156,6 +171,24 @@ run_app() {
   fi
   local init_container init_exit_code
   init_container="$(compose ps -q fizrmm-init 2>/dev/null || true)"
+  if [ -z "$init_container" ]; then
+    echo "FizRMM startup failed: fizrmm-init container was not created."
+    doctor || true
+    return 1
+  fi
+  echo "FizRMM initializer logs:"
+  local init_log_pid init_state
+  compose logs --no-color -f fizrmm-init &
+  init_log_pid="$!"
+  while true; do
+    init_state="$(docker inspect -f '{{.State.Status}}' "$init_container" 2>/dev/null || echo unknown)"
+    if [ "$init_state" = "exited" ] || [ "$init_state" = "dead" ] || [ "$init_state" = "unknown" ]; then
+      break
+    fi
+    sleep 2
+  done
+  kill "$init_log_pid" 2>/dev/null || true
+  wait "$init_log_pid" 2>/dev/null || true
   init_exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$init_container" 2>/dev/null || echo 1)"
   if [ "$init_exit_code" != "0" ]; then
     echo
@@ -166,7 +199,7 @@ run_app() {
 
   echo
   echo "Starting FizRMM API and portal."
-  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --no-build -d api portal; then
+  if ! compose_step "Starting API and portal containers." up --no-build -d api portal; then
     echo
     echo "FizRMM startup failed while starting API and portal."
     doctor || true
