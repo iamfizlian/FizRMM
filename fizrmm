@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 cd "$ROOT_DIR"
 export COMPOSE_PROGRESS="${COMPOSE_PROGRESS:-plain}"
+export BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}"
 
 usage() {
   cat <<'USAGE'
@@ -106,7 +107,7 @@ run_app() {
   COMPOSE_PARALLEL_LIMIT=1 compose build api
   COMPOSE_PARALLEL_LIMIT=1 compose build portal
   COMPOSE_PARALLEL_LIMIT=1 compose build salt-master
-  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --no-build -d; then
+  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --build -d; then
     echo
     echo "FizRMM startup failed during Docker Compose startup."
     doctor || true

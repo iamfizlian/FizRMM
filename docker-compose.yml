@@ -151,7 +151,6 @@ services:
     build:
       context: .
       dockerfile: deploy/salt/Dockerfile
-    image: fizrmm-salt-master:latest
     environment:
       SALT_SHARED_SECRET: ${SALT_SHARED_SECRET:-fizrmm-salt-dev-secret}
     ports:
