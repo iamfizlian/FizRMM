@@ -127,9 +127,48 @@ run_app() {
   COMPOSE_PARALLEL_LIMIT=1 compose build portal
   COMPOSE_PARALLEL_LIMIT=1 compose build salt-master
   COMPOSE_PARALLEL_LIMIT=1 compose build keycloak
-  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --build -d; then
+
+  echo "Starting FizRMM integration services."
+  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --build -d \
+    postgres \
+    keycloak \
+    nats \
+    meshcentral \
+    salt-master \
+    zabbix-postgres \
+    zabbix-server \
+    zabbix-web \
+    opensearch \
+    wazuh-manager; then
     echo
-    echo "FizRMM startup failed during Docker Compose startup."
+    echo "FizRMM startup failed while starting integration services."
+    doctor || true
+    return 1
+  fi
+
+  echo
+  echo "Running FizRMM integration initialization."
+  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --no-build fizrmm-init; then
+    echo
+    echo "FizRMM startup failed during integration initialization."
+    doctor || true
+    return 1
+  fi
+  local init_container init_exit_code
+  init_container="$(compose ps -q fizrmm-init 2>/dev/null || true)"
+  init_exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$init_container" 2>/dev/null || echo 1)"
+  if [ "$init_exit_code" != "0" ]; then
+    echo
+    echo "FizRMM startup failed: fizrmm-init exited with code $init_exit_code."
+    doctor || true
+    return 1
+  fi
+
+  echo
+  echo "Starting FizRMM API and portal."
+  if ! COMPOSE_PARALLEL_LIMIT=1 compose up --no-build -d api portal; then
+    echo
+    echo "FizRMM startup failed while starting API and portal."
     doctor || true
     return 1
   fi

@@ -241,6 +241,7 @@ services:
     working_dir: /init
     command: ["python", "/init/init.py"]
     environment:
+      PYTHONUNBUFFERED: "1"
       FIZRMM_INIT_CONFIG: /init/config.json
       FIZRMM_INTEGRATIONS_FILE: /runtime/fizrmm/integrations.json
       FIZRMM_INIT_WAIT_TIMEOUT: ${FIZRMM_INIT_WAIT_TIMEOUT:-240}
