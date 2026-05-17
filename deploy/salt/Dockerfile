@@ -8,16 +8,23 @@ RUN apt-get update \
     && python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir \
         salt \
+        cffi \
+        cryptography \
         distro \
+        importlib-metadata \
         jinja2 \
         looseversion \
         msgpack \
         packaging \
         psutil \
+        pyasn1 \
         pycryptodomex \
+        pyopenssl \
         pyzmq \
         pyyaml \
         requests \
+        rsa \
+        setproctitle \
         tornado
 
 RUN mkdir -p /etc/salt /etc/salt/pki /srv/salt /srv/pillar /var/cache/salt /var/log/salt
