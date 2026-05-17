@@ -122,9 +122,10 @@ services:
 
   opensearch:
     profiles: ["integrations"]
-    image: opensearchproject/opensearch:latest
+    image: opensearchproject/opensearch:${OPENSEARCH_VERSION:-2.19.3}
     environment:
       discovery.type: single-node
+      compatibility.override_main_response_version: "true"
       cluster.routing.allocation.disk.threshold_enabled: "false"
       plugins.security.disabled: "false"
       OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-FizRMM-dev-password-1!}
@@ -133,7 +134,7 @@ services:
       - "9200:9200"
       - "9600:9600"
     volumes:
-      - opensearch_data:/usr/share/opensearch/data
+      - opensearch2_data:/usr/share/opensearch/data
     networks:
       default:
         aliases:
@@ -270,7 +271,7 @@ services:
 
 volumes:
   postgres18_data:
-  opensearch_data:
+  opensearch2_data:
   runtime_config:
   frontend_node_modules:
   meshcentral_data:
