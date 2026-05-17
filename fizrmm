@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
+ORIGINAL_ARGS=("$@")
 cd "$ROOT_DIR"
 export COMPOSE_PROGRESS="${COMPOSE_PROGRESS:-plain}"
 export BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-plain}"
@@ -57,7 +58,14 @@ require_docker_disk_space() {
 
 pull_if_possible() {
   if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local before after
+    before="$(git rev-parse HEAD)"
     git pull --ff-only
+    after="$(git rev-parse HEAD)"
+    if [ "$before" != "$after" ]; then
+      echo "FizRMM updated. Restarting launcher with the updated script."
+      exec "$ROOT_DIR/fizrmm" "${ORIGINAL_ARGS[@]}"
+    fi
   else
     echo "Skipping git pull: git is unavailable or this is not a git checkout."
   fi
@@ -137,7 +145,7 @@ run_app() {
   require_docker
   pull_if_possible
   require_docker_disk_space
-  compose_step "Stopping old FizRMM containers." down --remove-orphans
+  compose_step "Stopping old FizRMM containers." down --timeout 20 --remove-orphans
   compose_step "Building FizRMM API image." build api
   compose_step "Building FizRMM portal image." build portal
   compose_step "Building FizRMM Salt image." build salt-master
