@@ -22,7 +22,7 @@ From the repository root, use one command:
 ./fizrmm
 ```
 
-That command uses `docker-compose.yml` with the integrations profile, pulls the latest code when possible, stops old containers, rebuilds FizRMM images, starts the full stack, and runs `fizrmm-init` to write runtime integration config. It runs in the foreground so you can see logs. Leave it running while you use the portal, or open another terminal for verification commands.
+That command uses `docker-compose.yml` with the integrations profile, pulls the latest code when possible, stops old containers, rebuilds FizRMM images, starts the full stack in the background, and runs `fizrmm-init` to write runtime integration config. It runs `./fizrmm doctor` automatically so failed/unhealthy containers and recent error lines are visible without streaming every service log. Use `./fizrmm logs [service]` only when you need full logs.
 
 Default services:
 
@@ -102,6 +102,7 @@ In another terminal:
 ```bash
 curl http://127.0.0.1:8000/health
 ./fizrmm status
+./fizrmm doctor
 ```
 
 List assets visible to an Acme technician:

@@ -33,6 +33,7 @@ This update added four user-visible setup areas:
 | --- | --- | --- |
 | Run FizRMM | `./fizrmm` | Open `http://127.0.0.1:5173/`. |
 | Check containers | `./fizrmm status` | Confirms the portal, API, database, and integration services are running. |
+| Diagnose startup | `./fizrmm doctor` | Shows failed/unhealthy containers and recent warning/error lines. |
 | Watch app logs | `./fizrmm logs` | Use `./fizrmm logs api` or `./fizrmm logs portal` for one service. |
 | Start integrations | `./fizrmm integrations` | Compatibility alias for `./fizrmm`. |
 | Reset local app data | `./fizrmm reset` | Removes containers and volumes, including PostgreSQL and integration data. |

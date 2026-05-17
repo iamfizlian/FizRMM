@@ -10,12 +10,13 @@ usage() {
 Usage: ./fizrmm [command]
 
 App commands (use docker-compose.yml: portal + API + PostgreSQL + integrations):
-  ./fizrmm                 Pull when possible, rebuild, initialize, and start FizRMM in the foreground
+  ./fizrmm                 Pull when possible, rebuild, initialize, and start FizRMM in the background
   ./fizrmm start           Same as the default command
   ./fizrmm stop            Stop app containers without deleting volumes
   ./fizrmm restart         Stop then start the app
   ./fizrmm status          Show app container status
-  ./fizrmm logs [service]  Follow app logs, optionally for api, portal, or postgres
+  ./fizrmm doctor          Show failed/unhealthy services and recent error logs
+  ./fizrmm logs [service]  Follow logs for all services or one service
   ./fizrmm reset           Stop app containers and delete app volumes/data
 
 Compatibility command:
@@ -42,13 +43,76 @@ pull_if_possible() {
   fi
 }
 
+compose() {
+  docker compose -f "$APP_COMPOSE_FILE" --profile integrations "$@"
+}
+
+doctor() {
+  require_docker
+  echo "Container status:"
+  compose ps --all
+  echo
+
+  local services
+  services="$(compose ps --services 2>/dev/null || true)"
+  local bad=0
+  local service container state health
+  for service in $services; do
+    container="$(compose ps -q "$service" 2>/dev/null || true)"
+    if [ -z "$container" ]; then
+      echo "MISSING: $service has no container."
+      bad=1
+      continue
+    fi
+    state="$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null || echo unknown)"
+    health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null || echo unknown)"
+    if [ "$state" != "running" ] && [ "$state" != "exited" ]; then
+      echo "PROBLEM: $service state=$state health=$health"
+      bad=1
+    elif [ "$state" = "exited" ]; then
+      if [ "$service" = "fizrmm-init" ]; then
+        local exit_code
+        exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$container" 2>/dev/null || echo 1)"
+        if [ "$exit_code" != "0" ]; then
+          echo "PROBLEM: $service exited with code $exit_code"
+          bad=1
+        fi
+      else
+        echo "PROBLEM: $service exited."
+        bad=1
+      fi
+    elif [ "$health" = "unhealthy" ]; then
+      echo "PROBLEM: $service is unhealthy."
+      bad=1
+    fi
+  done
+
+  echo
+  echo "Recent warnings/errors:"
+  compose logs --no-color --tail=120 2>/dev/null | grep -Ei 'error|fatal|panic|exception|traceback|failed|unhealthy|permission denied|timed out|not reachable|insufficient|warning' | tail -n 80 || true
+
+  if [ "$bad" -ne 0 ]; then
+    echo
+    echo "FizRMM startup has failed or degraded services. Use './fizrmm logs <service>' for one service."
+    return 1
+  fi
+}
+
 run_app() {
   require_docker
   pull_if_possible
-  docker compose -f "$APP_COMPOSE_FILE" --profile integrations down --remove-orphans
-  COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$APP_COMPOSE_FILE" --profile integrations build api
-  COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$APP_COMPOSE_FILE" --profile integrations build portal
-  COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$APP_COMPOSE_FILE" --profile integrations up --no-build
+  compose down --remove-orphans
+  COMPOSE_PARALLEL_LIMIT=1 compose build api
+  COMPOSE_PARALLEL_LIMIT=1 compose build portal
+  COMPOSE_PARALLEL_LIMIT=1 compose up --no-build -d
+  echo
+  echo "FizRMM is starting in the background."
+  echo "Portal: http://127.0.0.1:5173/"
+  echo "API health: http://127.0.0.1:8000/health"
+  echo
+  doctor
+  echo
+  echo "Use './fizrmm logs [service]' only when you need logs."
 }
 
 start_app() {
@@ -57,7 +121,7 @@ start_app() {
 
 stop_app() {
   require_docker
-  docker compose -f "$APP_COMPOSE_FILE" --profile integrations down --remove-orphans
+  compose down --remove-orphans
 }
 
 case "${1:-start}" in
@@ -73,15 +137,18 @@ case "${1:-start}" in
     ;;
   status|ps)
     require_docker
-    docker compose -f "$APP_COMPOSE_FILE" --profile integrations ps
+    compose ps
+    ;;
+  doctor)
+    doctor
     ;;
   logs)
     require_docker
-    docker compose -f "$APP_COMPOSE_FILE" --profile integrations logs -f "${@:2}"
+    compose logs -f "${@:2}"
     ;;
   reset)
     require_docker
-    docker compose -f "$APP_COMPOSE_FILE" --profile integrations down --volumes --remove-orphans
+    compose down --volumes --remove-orphans
     ;;
   integrations)
     run_app

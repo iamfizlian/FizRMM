@@ -118,6 +118,7 @@ services:
     image: opensearchproject/opensearch:latest
     environment:
       discovery.type: single-node
+      cluster.routing.allocation.disk.threshold_enabled: "false"
       plugins.security.disabled: "false"
       OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-FizRMM-dev-password-1!}
       OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
@@ -126,6 +127,10 @@ services:
       - "9600:9600"
     volumes:
       - opensearch_data:/usr/share/opensearch/data
+    networks:
+      default:
+        aliases:
+          - wazuh.indexer
 
   meshcentral:
     profiles: ["integrations"]
@@ -223,7 +228,7 @@ services:
     environment:
       FIZRMM_INIT_CONFIG: /init/config.json
       FIZRMM_INTEGRATIONS_FILE: /runtime/fizrmm/integrations.json
-      FIZRMM_INIT_WAIT_TIMEOUT: ${FIZRMM_INIT_WAIT_TIMEOUT:-180}
+      FIZRMM_INIT_WAIT_TIMEOUT: ${FIZRMM_INIT_WAIT_TIMEOUT:-600}
       FIZRMM_INIT_WAIT_SERVICES: ${FIZRMM_INIT_WAIT_SERVICES:-keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch}
       FIZRMM_INIT_REQUIRED_SERVICES: ${FIZRMM_INIT_REQUIRED_SERVICES:-keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
