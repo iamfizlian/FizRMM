@@ -28,6 +28,8 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
                 "NATS_URL",
                 "MESHCENTRAL_MESH_ID",
                 "MESHCENTRAL_LINUX_AGENT_INSTALLER_URL",
+                "MESHCENTRAL_PUBLIC_URL",
+                "FIZRMM_PUBLIC_URL",
             )
         }
         for key in self.previous:
@@ -115,6 +117,43 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
         self.assertEqual(config["meshcentral"]["mesh_id"], "mesh/domain/customer")
         self.assertEqual(config["meshcentral"]["server_url"], "https://mesh.example.test")
         self.assertEqual(meshcentral["bootstrap_missing"], [])
+
+    def test_meshcentral_runtime_public_url_generates_bootstrap_defaults(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "integrations.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "integrations": {
+                            "meshcentral": {
+                                "service": {"public_url": "https://mesh.example.test"},
+                                "bootstrap": {"mesh_id": "mesh/domain/customer"},
+                                "init": {"status": "configured", "service_reachable": True},
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(path)
+
+            config = deployment_config()
+            status = integration_status()
+
+        meshcentral = next(item for item in status["integrations"] if item["id"] == "meshcentral")
+        self.assertIn("https://mesh.example.test/meshagents?id=6", config["meshcentral"]["linux_installer_url"])
+        self.assertIn("meshid=mesh%2Fdomain%2Fcustomer", config["meshcentral"]["linux_installer_url"])
+        self.assertEqual(meshcentral["bootstrap_missing"], [])
+
+    def test_meshcentral_status_uses_public_request_host_for_generated_installer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(Path(directory) / "missing-runtime.json")
+
+            status = integration_status({"Host": "164.152.27.91:5173"})
+
+        meshcentral = next(item for item in status["integrations"] if item["id"] == "meshcentral")
+        self.assertEqual(meshcentral["bootstrap_missing"], [])
+        self.assertIn("https://164.152.27.91:8443/meshagents?id=6", meshcentral["bootstrap"]["linux_installer_url"])
 
 
     def test_setup_api_can_run_deployment_task_from_portal(self):

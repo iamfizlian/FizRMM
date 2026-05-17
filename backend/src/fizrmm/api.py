@@ -67,6 +67,12 @@ def meshcentral_public_url(portal_url: str) -> str:
     explicit = os.getenv("MESHCENTRAL_PUBLIC_URL", "").strip().rstrip("/")
     if explicit:
         return explicit
+    runtime_public = runtime_service_value("meshcentral", "public_url", "").strip().rstrip("/")
+    if runtime_public:
+        return runtime_public
+    runtime_url = runtime_service_value("meshcentral", "url", "").strip().rstrip("/")
+    if runtime_url and not is_local_or_internal_url(runtime_url):
+        return runtime_url
     service_url = os.getenv("MESHCENTRAL_URL", "").strip().rstrip("/")
     if service_url and not is_local_or_internal_url(service_url):
         return service_url
@@ -351,14 +357,18 @@ def integration_setup_defaults(integration_id: str, config: dict[str, object]) -
     elif integration_id == "meshcentral":
         meshcentral = config.get("meshcentral", {})
         mesh_values = meshcentral if isinstance(meshcentral, dict) else {}
+        mesh_id = str(mesh_values.get("mesh_id") or meshcentral_mesh_id()).strip()
+        defaults = meshcentral_installer_defaults(portal_url, mesh_id)
         public_url = meshcentral_public_url(portal_url)
         service = {"url": service_url, "public_url": public_url}
         bootstrap = {
             "server_url": str(mesh_values.get("server_url") or public_url),
-            "mesh_id": str(mesh_values.get("mesh_id") or ""),
-            "linux_installer_url": str(mesh_values.get("linux_installer_url") or ""),
-            "linux_install_args": str(mesh_values.get("linux_install_args") or '"$INSTALLER_PATH" -install'),
-            "linux_insecure_tls": str(mesh_values.get("linux_insecure_tls") or "true"),
+            "mesh_id": mesh_id,
+            "linux_installer_url": str(mesh_values.get("linux_installer_url") or defaults["linux_installer_url"]),
+            "linux_install_args": str(mesh_values.get("linux_install_args") or defaults["linux_install_args"]),
+            "linux_insecure_tls": str(mesh_values.get("linux_insecure_tls") or defaults["linux_insecure_tls"]),
+            "installer_url": str(mesh_values.get("installer_url") or defaults["installer_url"]),
+            "install_args": str(mesh_values.get("install_args") or defaults["install_args"]),
         }
     elif integration_id == "zabbix":
         zabbix = config.get("zabbix", {})
@@ -425,10 +435,18 @@ def ensure_runtime_integrations(config: dict[str, object]) -> None:
         run_runtime_setup(integration_id)
 
 
-def integration_status() -> dict[str, object]:
+def integration_status(headers: Any = None) -> dict[str, object]:
     config = deployment_config()
+    if headers is not None:
+        portal_url = public_portal_url(headers, config.get("portal_url"))
+        config["portal_url"] = portal_url
+        apply_meshcentral_agent_defaults(config, portal_url)
     ensure_runtime_integrations(config)
     config = deployment_config()
+    if headers is not None:
+        portal_url = public_portal_url(headers, config.get("portal_url"))
+        config["portal_url"] = portal_url
+        apply_meshcentral_agent_defaults(config, portal_url)
     runtime_config = load_runtime_config()
     identity_missing = [
         name
@@ -729,7 +747,7 @@ class FizRmmHandler(BaseHTTPRequestHandler):
         if parts == ["api", "scripts"]:
             return {"scripts": STORE.list_scripts(context)}
         if parts == ["api", "integrations"]:
-            return integration_status()
+            return integration_status(self.headers)
         if len(parts) == 4 and parts[:2] == ["api", "enrollments"] and parts[3] == "bootstrap.ps1":
             enrollment = STORE.get_enrollment_by_token(parts[2])
             portal_url = public_portal_url(self.headers, enrollment.config.get("portal_url"))
