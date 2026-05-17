@@ -1,6 +1,6 @@
 import unittest
 
-from fizrmm.models import AccessDenied, TenantContext, ValidationError
+from fizrmm.models import AccessDenied, NotFound, TenantContext, ValidationError
 from fizrmm.store import seed_store
 
 
@@ -26,6 +26,31 @@ class TenancyTests(unittest.TestCase):
     def test_cross_org_asset_lookup_is_denied(self):
         with self.assertRaises(AccessDenied):
             self.store.get_asset(self.acme_tech, "asset-globex-mac-01")
+
+    def test_asset_delete_removes_endpoint_records(self):
+        enrollment = self.store.create_enrollment(
+            self.acme_tech,
+            "org_acme",
+            "Acme HQ",
+            {"portal_url": "http://127.0.0.1:8000"},
+            "2099-01-01T00:00:00+00:00",
+        )
+        claim = self.store.claim_enrollment(enrollment["token"], "ACME-DUPLICATE", "Linux")
+        self.store.report_enrollment(
+            enrollment["token"],
+            [{"agent": "meshcentral", "status": "installed", "external_id": "meshcentral:ACME-DUPLICATE"}],
+        )
+
+        result = self.store.delete_asset(self.acme_tech, claim["asset_id"])
+
+        self.assertEqual(result["status"], "deleted")
+        self.assertNotIn(claim["asset_id"], {asset.id for asset in self.store.list_assets(self.acme_tech)})
+        with self.assertRaises(NotFound):
+            self.store.list_agent_health(self.acme_tech, claim["asset_id"])
+
+    def test_cross_org_asset_delete_is_denied(self):
+        with self.assertRaises(AccessDenied):
+            self.store.delete_asset(self.acme_tech, "asset-globex-mac-01")
 
     def test_platform_admin_can_see_all_assets(self):
         assets = self.store.list_assets(self.platform_admin)

@@ -723,6 +723,9 @@ class FizRmmHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         self._handle(lambda context, parts: self._route_post(context, parts))
 
+    def do_DELETE(self) -> None:
+        self._handle(lambda context, parts: self._route_delete(context, parts))
+
     def log_message(self, format: str, *args: Any) -> None:
         return
 
@@ -846,6 +849,11 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             )
         raise NotFound("route not found")
 
+    def _route_delete(self, context: TenantContext, parts: list[str]) -> Any:
+        if len(parts) == 3 and parts[:2] == ["api", "assets"]:
+            return STORE.delete_asset(context, parts[2])  # type: ignore[attr-defined]
+        raise NotFound("route not found")
+
     def _read_payload(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
         if length == 0:
@@ -865,7 +873,7 @@ class FizRmmHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-FizRMM-User, X-FizRMM-Orgs, X-FizRMM-Role")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.end_headers()
         self.wfile.write(body)
 

@@ -15,6 +15,7 @@ import {
   Search,
   ShieldCheck,
   TerminalSquare,
+  Trash2,
 } from "lucide-react";
 import "./styles.css";
 
@@ -333,6 +334,23 @@ function App() {
     }
   }
 
+  async function deleteSelectedAsset() {
+    if (!selectedAsset?.id) return;
+    const assetId = selectedAsset.id;
+    if (!window.confirm(`Remove endpoint ${selectedAsset.hostname} (${assetId}) from FizRMM?`)) return;
+    try {
+      await api(`/api/assets/${assetId}`, orgId, role, { method: "DELETE" });
+      setSelectedAssetId(null);
+      setAssetDetail(null);
+      setAgents([]);
+      setTimeline([]);
+      setNotice(`Removed endpoint ${assetId}`);
+      refreshAssets();
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
   async function createEnrollment(event) {
     event.preventDefault();
     try {
@@ -466,6 +484,7 @@ function App() {
                 <span>
                   <strong>{asset.hostname}</strong>
                   <small>{asset.operating_system} / {asset.site}</small>
+                  <small className="asset-id">{asset.id}</small>
                 </span>
               </button>
             ))}
@@ -483,6 +502,7 @@ function App() {
                 scripts={activeScripts}
                 onRemote={launchRemote}
                 onScript={runScript}
+                onDelete={deleteSelectedAsset}
               />
             )}
             {activeView === "enroll" && (
@@ -532,7 +552,7 @@ function App() {
   );
 }
 
-function AssetView({ selectedAsset, assetDetail, agents, timeline, lastAction, scripts, onRemote, onScript }) {
+function AssetView({ selectedAsset, assetDetail, agents, timeline, lastAction, scripts, onRemote, onScript, onDelete }) {
   if (!selectedAsset) {
     return <div className="empty-state">No assets visible for this context.</div>;
   }
@@ -544,10 +564,12 @@ function AssetView({ selectedAsset, assetDetail, agents, timeline, lastAction, s
           <p className="eyebrow">{selectedAsset.org_id}</p>
           <h2>{selectedAsset.hostname}</h2>
           <span>{selectedAsset.operating_system} / {selectedAsset.site}</span>
+          <small className="asset-id">{selectedAsset.id}</small>
         </div>
         <div className="action-bar">
           <button onClick={() => onRemote("meshcentral")}><MonitorCog size={17} /> Broker remote</button>
           <button onClick={() => onRemote("guacamole")}><TerminalSquare size={17} /> Broker jump</button>
+          <button className="danger-button" onClick={onDelete}><Trash2 size={17} /> Remove endpoint</button>
         </div>
       </div>
 

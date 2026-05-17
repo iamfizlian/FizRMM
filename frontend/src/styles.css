@@ -217,6 +217,15 @@ button {
   overflow-wrap: anywhere;
 }
 
+.asset-id {
+  color: #7a8a91;
+  display: block;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .state-dot {
   width: 10px;
   height: 10px;
@@ -575,6 +584,15 @@ button {
   display: inline-flex;
   gap: 8px;
   align-items: center;
+}
+
+.danger-button {
+  border-color: #d7aaa6;
+  color: #8f2f2a;
+}
+
+.danger-button:hover {
+  background: #fff1f0;
 }
 
 .timeline {

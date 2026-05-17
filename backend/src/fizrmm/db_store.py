@@ -124,6 +124,22 @@ class PostgresControlPlaneStore:
                 raise NotFound(f"asset not found: {asset_id}")
             return self._asset(row)
 
+    def delete_asset(self, context: TenantContext, asset_id: str) -> dict[str, str]:
+        asset = self.get_asset(context, asset_id)
+        with self._cursor(context) as cur:
+            cur.execute("update endpoint_enrollments set asset_id = null where asset_id = %s", (asset.id,))
+            cur.execute(
+                """
+                update audit_events
+                set asset_id = null,
+                    details = details || jsonb_build_object('deleted_asset_id', %s)
+                where asset_id = %s
+                """,
+                (asset.id, asset.id),
+            )
+            cur.execute("delete from assets where id = %s", (asset.id,))
+        return {"asset_id": asset.id, "status": "deleted"}
+
     def list_connectors(self, context: TenantContext, asset_id: str) -> list[ConnectorIdentity]:
         self._require_asset_access(context, asset_id)
         with self._cursor(context) as cur:

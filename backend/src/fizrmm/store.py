@@ -80,6 +80,34 @@ class InMemoryControlPlaneStore:
         self._require_org(context, asset.org_id)
         return asset
 
+    def delete_asset(self, context: TenantContext, asset_id: str) -> dict[str, str]:
+        asset = self.get_asset(context, asset_id)
+        del self.assets[asset.id]
+        self.connectors = [connector for connector in self.connectors if connector.asset_id != asset.id]
+        self.agent_health = [health for health in self.agent_health if health.asset_id != asset.id]
+        self.timeline_events = [event for event in self.timeline_events if event.asset_id != asset.id]
+        self.audit_events = [
+            AuditEvent(
+                **{
+                    **event.__dict__,
+                    "asset_id": None,
+                    "details": {**event.details, "deleted_asset_id": asset.id},
+                }
+            )
+            if event.asset_id == asset.id
+            else event
+            for event in self.audit_events
+        ]
+        self.enrollments = {
+            token: (
+                EndpointEnrollment(**{**enrollment.__dict__, "asset_id": None})
+                if enrollment.asset_id == asset.id
+                else enrollment
+            )
+            for token, enrollment in self.enrollments.items()
+        }
+        return {"asset_id": asset.id, "status": "deleted"}
+
     def list_connectors(self, context: TenantContext, asset_id: str) -> list[ConnectorIdentity]:
         asset = self.get_asset(context, asset_id)
         return [
