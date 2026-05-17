@@ -1,9 +1,6 @@
 # FizRMM Installation Guide
 
-This page is the step-by-step setup guide for the current FizRMM Docker workflow. There are two setup paths:
-
-- **App setup**: starts the portal, API, and PostgreSQL database. This is the normal path and is enough to open the UI, inspect seeded assets, create organizations, and create endpoint enrollment commands.
-- **Integration setup**: starts optional third-party service containers and then completes runtime setup from the portal. Use this only when you want local Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, or OpenSearch containers.
+This page is the step-by-step setup guide for the current FizRMM Docker workflow. The normal path starts the portal, API, PostgreSQL database, and bundled integration services.
 
 
 ## 1. Prerequisites
@@ -25,13 +22,21 @@ From the repository root, use one command:
 ./fizrmm
 ```
 
-That command uses `docker-compose.app.yml`, pulls the latest code when possible, stops old application containers, rebuilds images, and starts the application. It runs in the foreground so you can see logs. Leave it running while you use the portal, or open another terminal for verification commands.
+That command uses `docker-compose.yml` with the integrations profile, pulls the latest code when possible, stops old containers, rebuilds FizRMM images, starts the full stack, and runs `fizrmm-init` to write runtime integration config. It runs in the foreground so you can see logs. Leave it running while you use the portal, or open another terminal for verification commands.
 
 Default services:
 
 - `postgres`: FizRMM database.
 - `api`: FizRMM backend.
 - `portal`: FizRMM web UI.
+- `keycloak`: SSO.
+- `meshcentral`: remote access backing service.
+- `zabbix-server` and `zabbix-web`: monitoring.
+- `wazuh-manager`: security telemetry.
+- `salt-master`: automation.
+- `nats`: message bus.
+- `opensearch`: indexed telemetry/search.
+- `fizrmm-init`: one-shot integration initializer.
 
 ## 3. Open The UI
 
@@ -117,39 +122,13 @@ Expected status:
 HTTP/1.0 403 Forbidden
 ```
 
-## 6. Optional Integration Containers
+## 6. Integration Status And Overrides
 
-Skip this section if you only need the app UI/API/database. Use it when you want local third-party backing services.
+The bundled integration stack is part of `./fizrmm`. The init container waits for the backing services, configures Keycloak, writes `/runtime/fizrmm/integrations.json`, and the API auto-initializes any missing runtime config from generated defaults.
 
-The default `./fizrmm` command does **not** start Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, or OpenSearch. To start those containers, run:
+Open **Integrations** in the portal to inspect live status. There is no manual setup sequence for the bundled stack. Platform admins can open **Override generated config** only when pointing FizRMM at external services or custom installers.
 
-```bash
-./fizrmm integrations
-```
-
-What this command does:
-
-1. Builds the FizRMM API and portal images used by the integration stack.
-2. Starts `docker-compose.yml` with the `integrations` profile.
-3. Starts the optional services plus `fizrmm-init`, which writes initial integration runtime config when the services are reachable.
-
-Then complete setup from the portal:
-
-1. Open `http://127.0.0.1:5173/`.
-2. In the top bar, change the role selector from **Technician** to **Platform admin**.
-3. Open **Integrations** in the left navigation.
-4. If you are using the bundled local containers, click **Use deployment defaults + run** on each integration card.
-5. If you are using existing external services, edit the service/bootstrap values first, then click **Save and run setup**.
-
-What the setup buttons mean:
-
-- **Save setup** writes the values only.
-- **Save and run setup** writes the values and asks the API to run the deployment setup check.
-- **Use deployment defaults + run** fills in the bundled local Docker defaults and runs the same setup check.
-
-The API persists `/runtime/fizrmm/integrations.json` on the shared Compose volume. An integration moves from `configured` to `initialized` once its backing service endpoint is reachable from the API container. If it remains `setup_pending`, keep the integration stack running and click **Save and run setup** again after the service finishes starting.
-
-Open optional service UIs only when that profile is running:
+Bundled service UIs:
 
 - MeshCentral: `https://127.0.0.1:8443/`
 - Zabbix: `http://127.0.0.1:8081/`

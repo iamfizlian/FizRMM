@@ -2,15 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_COMPOSE_FILE="$ROOT_DIR/docker-compose.app.yml"
+APP_COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 cd "$ROOT_DIR"
 
 usage() {
   cat <<'USAGE'
 Usage: ./fizrmm [command]
 
-App commands (use docker-compose.app.yml: portal + API + PostgreSQL):
-  ./fizrmm                 Pull when possible, rebuild, and start the app in the foreground
+App commands (use docker-compose.yml: portal + API + PostgreSQL + integrations):
+  ./fizrmm                 Pull when possible, rebuild, initialize, and start FizRMM in the foreground
   ./fizrmm start           Same as the default command
   ./fizrmm stop            Stop app containers without deleting volumes
   ./fizrmm restart         Stop then start the app
@@ -18,11 +18,8 @@ App commands (use docker-compose.app.yml: portal + API + PostgreSQL):
   ./fizrmm logs [service]  Follow app logs, optionally for api, portal, or postgres
   ./fizrmm reset           Stop app containers and delete app volumes/data
 
-Integration command (use docker-compose.yml with the integrations profile):
-  ./fizrmm integrations    Start optional Keycloak/MeshCentral/Zabbix/Wazuh/Salt/NATS/OpenSearch containers
-
-After './fizrmm integrations', open http://127.0.0.1:5173/, switch to Platform admin,
-open Integrations, then click 'Use deployment defaults + run' or 'Save and run setup'.
+Compatibility command:
+  ./fizrmm integrations    Same as start
 USAGE
 }
 
@@ -48,8 +45,10 @@ pull_if_possible() {
 run_app() {
   require_docker
   pull_if_possible
-  docker compose -f "$APP_COMPOSE_FILE" down --remove-orphans
-  docker compose -f "$APP_COMPOSE_FILE" up --build
+  docker compose -f "$APP_COMPOSE_FILE" --profile integrations down --remove-orphans
+  COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$APP_COMPOSE_FILE" --profile integrations build api
+  COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$APP_COMPOSE_FILE" --profile integrations build portal
+  COMPOSE_PARALLEL_LIMIT=1 docker compose -f "$APP_COMPOSE_FILE" --profile integrations up --no-build
 }
 
 start_app() {
@@ -58,7 +57,7 @@ start_app() {
 
 stop_app() {
   require_docker
-  docker compose -f "$APP_COMPOSE_FILE" down --remove-orphans
+  docker compose -f "$APP_COMPOSE_FILE" --profile integrations down --remove-orphans
 }
 
 case "${1:-start}" in
@@ -74,21 +73,18 @@ case "${1:-start}" in
     ;;
   status|ps)
     require_docker
-    docker compose -f "$APP_COMPOSE_FILE" ps
+    docker compose -f "$APP_COMPOSE_FILE" --profile integrations ps
     ;;
   logs)
     require_docker
-    docker compose -f "$APP_COMPOSE_FILE" logs -f "${@:2}"
+    docker compose -f "$APP_COMPOSE_FILE" --profile integrations logs -f "${@:2}"
     ;;
   reset)
     require_docker
-    docker compose -f "$APP_COMPOSE_FILE" down --volumes --remove-orphans
+    docker compose -f "$APP_COMPOSE_FILE" --profile integrations down --volumes --remove-orphans
     ;;
   integrations)
-    require_docker
-    COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations build api
-    COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations build portal
-    COMPOSE_PARALLEL_LIMIT=1 docker compose --profile integrations up --no-build
+    run_app
     ;;
   help|-h|--help)
     usage

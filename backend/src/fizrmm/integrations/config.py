@@ -68,8 +68,8 @@ def save_runtime_integration(name: str, service: dict[str, Any], bootstrap: dict
         existing_bootstrap[key] = value
     init = integration.setdefault("init", {})
     if isinstance(init, dict):
-        init["status"] = "setup_saved"
-        init["message"] = "Integration setup was saved from the FizRMM portal. Run/init the backing service to mark it initialized."
+        init["status"] = "configured"
+        init["message"] = "Integration runtime config is active."
         init["runtime_config_written"] = True
     path = runtime_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)

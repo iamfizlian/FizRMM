@@ -1,10 +1,10 @@
 # FizRMM
 
-FizRMM is an MSP RMM control-plane application. The supported Docker startup runs the application itself: PostgreSQL, the API, and the technician portal. Optional third-party service containers are no longer part of the default install path.
+FizRMM is an MSP RMM control-plane application. The supported Docker startup runs the portal, API, PostgreSQL, and the bundled integration stack: Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, and OpenSearch.
 
 ## Quick Start
 
-Use this path when you want the working FizRMM app only:
+Use this path to start the full working FizRMM stack:
 
 ```bash
 ./fizrmm
@@ -16,28 +16,26 @@ When the containers finish starting, open:
 http://127.0.0.1:5173/
 ```
 
-The default app stack is intentionally small: portal + API + PostgreSQL. It does **not** start Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, or OpenSearch. Those optional services are started only by the integrations workflow below.
-
 On a cloud VM, replace `127.0.0.1` with the VM public IP after opening TCP `5173` in the cloud security rules and host firewall. The browser only needs the portal port; the portal proxies `/api` to the backend container.
 
 ## What Was Added In This Change
 
 This update added four user-visible setup areas:
 
-1. **One-command app startup** with `./fizrmm`, backed by `docker-compose.app.yml`.
+1. **One-command full-stack startup** with `./fizrmm`, backed by `docker-compose.yml`.
 2. **Endpoint enrollment** from the portal, including Windows `bootstrap.ps1` and Linux `bootstrap.sh` downloads.
-3. **Integration setup from the portal**. Platform admins can save service/bootstrap values, apply bundled defaults, and run a deployment setup check from the UI.
-4. **Optional local integration stack** via `./fizrmm integrations` for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, and OpenSearch.
+3. **Automatic integration initialization**. The `fizrmm-init` container writes runtime config for the bundled integration stack.
+4. **Optional integration overrides** from the portal for deployments that point FizRMM at external services.
 
 ## Which Setup Path Should I Use?
 
 | Goal | Command | What to do next |
 | --- | --- | --- |
-| Run the FizRMM app UI/API/database | `./fizrmm` | Open `http://127.0.0.1:5173/`. |
-| Check app containers | `./fizrmm status` | Confirms portal, API, and Postgres are running. |
+| Run FizRMM | `./fizrmm` | Open `http://127.0.0.1:5173/`. |
+| Check containers | `./fizrmm status` | Confirms the portal, API, database, and integration services are running. |
 | Watch app logs | `./fizrmm logs` | Use `./fizrmm logs api` or `./fizrmm logs portal` for one service. |
-| Start optional third-party services too | `./fizrmm integrations` | In the portal, switch to **Platform admin** → **Integrations** → **Use deployment defaults + run**. |
-| Reset local app data | `./fizrmm reset` | Removes app containers and volumes, including PostgreSQL data. |
+| Start integrations | `./fizrmm integrations` | Compatibility alias for `./fizrmm`. |
+| Reset local app data | `./fizrmm reset` | Removes containers and volumes, including PostgreSQL and integration data. |
 
 ## Stop, Update, Restart
 
@@ -61,33 +59,19 @@ Restart without pulling code:
 
 ## What Starts By Default
 
-`./fizrmm` uses `docker-compose.app.yml` and starts only the working FizRMM application services:
+`./fizrmm` uses `docker-compose.yml` with the integrations profile and starts:
 
 - `postgres`: application database with seeded organizations, assets, scripts, and timeline data.
 - `api`: FizRMM backend at `http://127.0.0.1:8000`.
 - `portal`: FizRMM web UI at `http://127.0.0.1:5173`.
+- `fizrmm-init`: one-shot initialization for runtime integration config.
+- `keycloak`, `meshcentral`, `zabbix-server`, `zabbix-web`, `wazuh-manager`, `salt-master`, `opensearch`, and `nats`.
 
 The portal includes the current application workflows: assets, endpoint enrollment, automation requests, integration readiness, alerts, logs, and access/org creation.
 
-## Optional External Service Containers
+## Integration Overrides
 
-FizRMM ships bundled service defaults for Keycloak, MeshCentral, Zabbix, Wazuh, Salt, NATS, and OpenSearch. These defaults let the portal show you exactly what would be used, but they do not start the third-party products by themselves.
-
-To run those products locally:
-
-```bash
-./fizrmm integrations
-```
-
-Then finish setup in the web UI:
-
-1. Open `http://127.0.0.1:5173/`.
-2. Change the role dropdown in the top bar to **Platform admin**.
-3. Open **Integrations**.
-4. For the bundled stack, click **Use deployment defaults + run** on each integration. If you use external services, edit the service/bootstrap fields first and click **Save and run setup**.
-5. The API writes the runtime config to the shared Docker volume and marks an integration `initialized` after the service endpoint is reachable from the API container.
-
-For endpoint enrollment, MeshCentral still needs a real MeshCentral device-group ID (`MESHCENTRAL_MESH_ID`) or an explicit Linux installer URL before the bootstrap can install the remote-control agent.
+The bundled stack initializes automatically. Use the portal **Integrations** view only when you want to override generated config for external services or custom agent installers. The API persists `/runtime/fizrmm/integrations.json` on the shared Docker volume.
 
 ## Smoke Checks
 

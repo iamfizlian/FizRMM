@@ -61,20 +61,18 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
         integrations = {item["id"]: item for item in status["integrations"]}
         for integration_id in ("identity", "meshcentral", "zabbix", "wazuh", "salt", "opensearch", "nats"):
             self.assertTrue(integrations[integration_id]["configured"], integration_id)
-            self.assertEqual(integrations[integration_id]["state"], "configured")
+            self.assertEqual(integrations[integration_id]["state"], "initialized")
+            self.assertTrue(integrations[integration_id]["initialized"], integration_id)
             self.assertEqual(integrations[integration_id]["missing"], [])
         self.assertEqual(integrations["identity"]["service_url"], "http://keycloak:8080")
         self.assertEqual(integrations["zabbix"]["service_url"], "http://zabbix-web:8080/api_jsonrpc.php")
         self.assertEqual(config["zabbix"]["server_url"], "127.0.0.1")
         self.assertEqual(config["wazuh"]["manager_url"], "127.0.0.1")
         self.assertEqual(config["salt"]["master_url"], "127.0.0.1")
-        self.assertEqual(integrations["meshcentral"]["bootstrap_missing"], ["mesh_id or linux_installer_url"])
-        self.assertTrue(integrations["meshcentral"]["setup_required"])
-        self.assertTrue(any("MeshCentral device group" in step for step in integrations["meshcentral"]["setup_steps"]))
-        self.assertTrue(any("Zabbix server" in step for step in integrations["zabbix"]["setup_steps"]))
-        self.assertTrue(any("Wazuh manager" in step for step in integrations["wazuh"]["setup_steps"]))
-        self.assertTrue(any("Salt master" in step for step in integrations["salt"]["setup_steps"]))
-        self.assertFalse(status["ready_for_real_endpoints"])
+        self.assertEqual(integrations["meshcentral"]["bootstrap_missing"], [])
+        self.assertFalse(integrations["meshcentral"]["setup_required"])
+        self.assertIn("meshagents?id=6", config["meshcentral"]["linux_installer_url"])
+        self.assertTrue(status["ready_for_real_endpoints"])
 
 
     def test_integration_setup_api_persists_runtime_config(self):
@@ -145,7 +143,7 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
         self.assertEqual(integration["init"]["status"], "configured")
         self.assertTrue(nats["initialized"])
 
-    def test_setup_task_reports_pending_when_service_is_not_reachable(self):
+    def test_setup_task_keeps_runtime_initialized_when_service_is_not_reachable(self):
         with tempfile.TemporaryDirectory() as directory:
             os.environ["FIZRMM_INTEGRATIONS_FILE"] = str(Path(directory) / "integrations.json")
             payload = configure_integration(
@@ -155,7 +153,7 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
             )
 
         self.assertEqual(payload["integration"]["init"]["requested_from"], "web_ui")
-        self.assertEqual(payload["integration"]["init"]["status"], "setup_pending")
+        self.assertEqual(payload["integration"]["init"]["status"], "configured")
         self.assertFalse(payload["integration"]["init"]["service_reachable"])
 
     def test_runtime_config_feeds_deployment_config(self):
@@ -185,7 +183,7 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
         self.assertEqual(config["meshcentral"]["installer_url"], "http://api/installers/meshcentral.exe")
         self.assertEqual(config["meshcentral"]["install_args"], "/quiet")
 
-    def test_runtime_config_written_alone_does_not_mark_initialized(self):
+    def test_runtime_config_is_auto_initialized(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "integrations.json"
             path.write_text(
@@ -212,8 +210,8 @@ class RuntimeIntegrationConfigTests(unittest.TestCase):
         nats = next(item for item in status["integrations"] if item["id"] == "nats")
         self.assertTrue(status["runtime_config_loaded"])
         self.assertTrue(nats["configured"])
-        self.assertFalse(nats["initialized"])
-        self.assertEqual(nats["state"], "configured")
+        self.assertTrue(nats["initialized"])
+        self.assertEqual(nats["state"], "initialized")
 
     def test_configured_runtime_status_marks_integration_initialized(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -46,13 +46,11 @@ def can_connect(host: str, port: int, timeout: float = 2.0) -> bool:
 
 
 def run_runtime_setup(integration_id: str) -> dict[str, Any]:
-    """Run the web-initiated deployment setup task for one integration.
+    """Refresh integration diagnostics and keep runtime setup initialized.
 
-    The task validates that the configured backing service endpoint is reachable,
-    records deployment metadata in the shared runtime config, and marks the
-    integration initialized when the service-level setup can be completed from
-    the portal. Deep product-specific bootstrapping can extend this function as
-    adapters mature while preserving the same UI/API contract.
+    Runtime setup is owned by FizRMM's generated config. Service reachability is
+    recorded as diagnostics, but an API-container TCP failure must not turn a
+    configured deployment back into a manual setup task.
     """
     config = load_runtime_config()
     integrations = config.setdefault("integrations", {})
@@ -81,14 +79,13 @@ def run_runtime_setup(integration_id: str) -> dict[str, Any]:
             "last_setup_attempt_unix": int(time.time()),
         }
     )
+    init["status"] = "configured"
     if reachable:
-        init["status"] = "configured"
         init["message"] = "Deployment setup completed from the FizRMM portal; the backing service endpoint is reachable."
     else:
-        init["status"] = "setup_pending"
         init["message"] = (
-            "Setup values were saved from the FizRMM portal, but the backing service endpoint "
-            f"{host}:{port} is not reachable from the API container yet. Start/connect the service and run setup again."
+            "Integration runtime config is active. The backing service endpoint "
+            f"{host}:{port} is not reachable from the API container, so API-side features may be degraded until it is reachable."
         )
 
     path = runtime_config_path()

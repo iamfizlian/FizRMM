@@ -674,8 +674,8 @@ function IntegrationsView({ integrations, integrationReady, role, onSetup }) {
     <div className="workflow-panel">
       <div>
         <p className="eyebrow">Integration readiness</p>
-        <h2>{integrationReady ? "Ready for real endpoints" : "Subsystem configuration needed"}</h2>
-        <p className="muted">Each subsystem has two jobs: FizRMM must know how to reach the service, and new endpoints must know where to enroll their agents.</p>
+        <h2>{integrationReady ? "Full stack active" : "Integration stack degraded"}</h2>
+        <p className="muted">FizRMM initializes bundled integrations automatically from the running deployment. This page is for live status and optional overrides.</p>
       </div>
       <section className={`readiness-summary ${integrationReady ? "ready" : "attention"}`}>
         <div>
@@ -684,33 +684,17 @@ function IntegrationsView({ integrations, integrationReady, role, onSetup }) {
         </div>
         <div>
           <strong>{initialized}/{integrations.length}</strong>
-          <span>setup tasks initialized</span>
+          <span>integrations active</span>
         </div>
         <div>
           <strong>{blocked.length}</strong>
-          <span>items need attention</span>
+          <span>degraded integrations</span>
         </div>
       </section>
       <div className="readiness-help">
-        <strong>How to read this page</strong>
-        <span>For a first working deployment, fill the recommended fields shown on each card and use defaults. Open advanced installer overrides only when you host your own agent packages.</span>
+        <strong>Automatic configuration</strong>
+        <span>The normal FizRMM start path launches Keycloak, MeshCentral, Zabbix, Wazuh, Salt, OpenSearch, and NATS, then writes the runtime config used by the API and endpoint bootstrap scripts.</span>
       </div>
-      {blocked.length > 0 && (
-        <section className="readiness-next">
-          <div>
-            <strong>Setup tasks still required</strong>
-            <span>These are the items behind the readiness count. Complete them here, then use Save and run setup on each matching card.</span>
-          </div>
-          <ol>
-            {blocked.map((integration) => (
-              <li key={integration.id}>
-                <strong>{integration.name}</strong>
-                <span>{setupActionSummary(integration).join(" ")}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
       <div className="integration-grid expanded">
         {integrations.map((integration) => (
           <IntegrationCard
@@ -828,19 +812,19 @@ function requirementLabel(integration, section, requirement) {
     .join(" or ");
 }
 
-function setupActionSummary(integration) {
+function integrationIssueSummary(integration) {
   const required = integrationRequiredFields(integration);
   const actions = [];
   if (required.service.length > 0) {
-    actions.push(`Fill ${required.service.map((field) => requirementLabel(integration, "service", field)).join(", ")}.`);
+    actions.push(`Missing service config: ${required.service.map((field) => requirementLabel(integration, "service", field)).join(", ")}.`);
   }
   if (required.bootstrap.length > 0) {
-    actions.push(`Fill ${required.bootstrap.map((field) => requirementLabel(integration, "bootstrap", field)).join(", ")}.`);
+    actions.push(`Missing endpoint config: ${required.bootstrap.map((field) => requirementLabel(integration, "bootstrap", field)).join(", ")}.`);
   }
   if (!integration.initialized) {
-    actions.push("Run its setup task.");
+    actions.push(integration.init?.message || "Runtime initialization has not completed.");
   }
-  return actions.length ? actions : ["Review this subsystem before enrolling endpoints."];
+  return actions;
 }
 
 function recommendedFields(integration, section) {
@@ -901,16 +885,6 @@ function IntegrationCard({ integration, canConfigure, onSetup }) {
     event.preventDefault();
     setSaving(true);
     try {
-      await onSetup(integration.id, { ...values, run_setup: false });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function saveAndRun(event) {
-    event.preventDefault();
-    setSaving(true);
-    try {
       await onSetup(integration.id, { ...values, run_setup: true });
     } finally {
       setSaving(false);
@@ -948,72 +922,65 @@ function IntegrationCard({ integration, canConfigure, onSetup }) {
       {guide.note && <small>{guide.note}</small>}
       {integration.setup_required && (
         <div className="setup-required">
-          <strong>Needs setup</strong>
+          <strong>Degraded</strong>
           <ul>
-            {setupActionSummary(integration).map((action) => <li key={action}>{action}</li>)}
+            {integrationIssueSummary(integration).map((action) => <li key={action}>{action}</li>)}
           </ul>
-          {integration.init?.message && <span>Last setup task: {integration.init.message}</span>}
         </div>
-      )}
-      {integration.setup_required && integration.setup_steps?.length > 0 && (
-        <ol className="setup-steps">
-          {integration.setup_steps.map((step) => <li key={step}>{step}</li>)}
-        </ol>
       )}
       <form className="integration-setup-form" onSubmit={submit}>
-        <SetupFieldGroup
-          title="Recommended setup"
-          body="Fill these first. They are the values normally needed for this subsystem to work."
-          integration={integration}
-          section="service"
-          fields={recommendedService}
-          values={values}
-          onUpdate={update}
-        />
-        <SetupFieldGroup
-          title="Endpoint enrollment"
-          body={recommendedBootstrap.length ? "These values are written into new bootstrap scripts." : ""}
-          integration={integration}
-          section="bootstrap"
-          fields={recommendedBootstrap}
-          values={values}
-          onUpdate={update}
-        />
-        {(advancedService.length > 0 || advancedBootstrap.length > 0) && (
-          <details className="advanced-setup">
-            <summary>Advanced installer and API overrides</summary>
-            <SetupFieldGroup
-              title={INTEGRATION_SETUP_COPY.service.title}
-              body={INTEGRATION_SETUP_COPY.service.body}
-              integration={integration}
-              section="service"
-              fields={advancedService}
-              values={values}
-              onUpdate={update}
-            />
-            <SetupFieldGroup
-              title={INTEGRATION_SETUP_COPY.bootstrap.title}
-              body={INTEGRATION_SETUP_COPY.bootstrap.body}
-              integration={integration}
-              section="bootstrap"
-              fields={advancedBootstrap}
-              values={values}
-              onUpdate={update}
-            />
-          </details>
-        )}
-        <div className="setup-actions">
-          <button type="submit" disabled={!canConfigure || saving}>
-            {saving ? "Saving…" : "Save setup"}
-          </button>
-          <button type="button" disabled={!canConfigure || saving} onClick={saveAndRun}>
-            Save and run setup
-          </button>
-          <button type="button" disabled={!canConfigure || saving} onClick={applyDefaultsAndRun}>
-            Use deployment defaults + run
-          </button>
-        </div>
-        {!canConfigure && <small>Switch to Platform admin role to save and run integration setup.</small>}
+        <details className="advanced-setup">
+          <summary>Override generated config</summary>
+          <SetupFieldGroup
+            title="Service connection"
+            body="Override only when this deployment uses an external service instead of the bundled stack."
+            integration={integration}
+            section="service"
+            fields={recommendedService}
+            values={values}
+            onUpdate={update}
+          />
+          <SetupFieldGroup
+            title="Endpoint bootstrap"
+            body={recommendedBootstrap.length ? "Override only when endpoints must use a different service address or installer." : ""}
+            integration={integration}
+            section="bootstrap"
+            fields={recommendedBootstrap}
+            values={values}
+            onUpdate={update}
+          />
+          {(advancedService.length > 0 || advancedBootstrap.length > 0) && (
+            <>
+              <SetupFieldGroup
+                title={INTEGRATION_SETUP_COPY.service.title}
+                body={INTEGRATION_SETUP_COPY.service.body}
+                integration={integration}
+                section="service"
+                fields={advancedService}
+                values={values}
+                onUpdate={update}
+              />
+              <SetupFieldGroup
+                title={INTEGRATION_SETUP_COPY.bootstrap.title}
+                body={INTEGRATION_SETUP_COPY.bootstrap.body}
+                integration={integration}
+                section="bootstrap"
+                fields={advancedBootstrap}
+                values={values}
+                onUpdate={update}
+              />
+            </>
+          )}
+          <div className="setup-actions">
+            <button type="submit" disabled={!canConfigure || saving}>
+              {saving ? "Saving..." : "Save override"}
+            </button>
+            <button type="button" disabled={!canConfigure || saving} onClick={applyDefaultsAndRun}>
+              Restore generated config
+            </button>
+          </div>
+          {!canConfigure && <small>Switch to Platform admin role to save integration overrides.</small>}
+        </details>
       </form>
     </div>
   );

@@ -1,8 +1,8 @@
 # Endpoint Deployment
 
-The Docker install starts the FizRMM application: portal, API, and PostgreSQL. The control plane can issue endpoint enrollment tokens and downloadable Windows PowerShell and Linux shell bootstrap scripts. Optional backing-service containers are available separately for adapter development, but endpoint bootstrap generation does not require them.
+The Docker install starts the FizRMM application and bundled backing services. The control plane can issue endpoint enrollment tokens and downloadable Windows PowerShell and Linux shell bootstrap scripts. Runtime integration config is generated automatically by the stack and can be overridden from the portal only when needed.
 
-Real remote access and monitoring still require the FizRMM adapters to finish configuring MeshCentral, Zabbix, Wazuh, and Salt plus OS-specific agent installer URLs. For remote access, set `MESHCENTRAL_MESH_ID` or `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` before running a bootstrap. If MeshCentral installer config is not ready, bootstrap still claims/reports the endpoint and marks MeshCentral as skipped; Zabbix, Wazuh, and Salt are also reported as skipped when their Linux installer URLs are empty.
+Endpoint enrollment installs or configures MeshCentral, Zabbix, Wazuh, and Salt from generated runtime config. Zabbix, Wazuh, and Salt use built-in Linux installers when explicit installer URLs are not provided. MeshCentral installer URLs are derived from the configured public MeshCentral URL.
 
 To manage a real PC, FizRMM needs an endpoint enrollment flow that installs and registers the agent bundle for that organization/site/device. The planned default endpoint footprint is:
 
@@ -117,30 +117,25 @@ Or run the one-line `linux_command` returned by the API/portal, which already in
 1. Verifies it is running as root.
 2. Claims the enrollment token with hostname and Linux OS information.
 3. Downloads configured Linux installer URLs when present.
-4. Uses a MeshCentral Linux installer URL when one is derived from `MESHCENTRAL_MESH_ID` or supplied explicitly with `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL`.
+4. Uses the generated MeshCentral Linux installer URL or an explicit `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` override.
 5. Installs Zabbix, Wazuh, and Salt with built-in Linux installers when explicit installer URLs are not provided: Zabbix via the system package manager, Wazuh via the official apt/yum repositories, and Salt via the package manager or Salt bootstrap script.
 6. Falls back to `skipped_no_installer_url`, `skipped_builtin_disabled`, or `failed_install` reports when an installer is unavailable, disabled, or fails. It deliberately does not fall back to generic Windows installer URLs, so a Linux bootstrap will not try to download `.exe` installers from the Windows bootstrap config.
 7. Reports MeshCentral/Zabbix/Wazuh/Salt connector status back to FizRMM.
 
-### Integration setup prerequisites
+### Integration Runtime Config
 
-Use the portal **Integrations** view while in Platform admin role to save these values, or set the equivalent environment variables. The bootstrap can install endpoint agents, but the server-side applications still must be real, reachable, and configured:
-
-- **MeshCentral:** run/connect MeshCentral, expose the public HTTPS/WebSocket URL, create a device group, and set `MESHCENTRAL_MESH_ID` or `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL`. Without this, MeshCentral is reported as skipped because FizRMM cannot invent a MeshCentral mesh/group.
-- **Zabbix:** run/connect Zabbix server/web, expose TCP `10051` to endpoints, set `ZABBIX_SERVER` to the endpoint-reachable server/proxy, and configure host auto-registration/templates.
-- **Wazuh:** run/connect Wazuh manager, expose `1514`/`1515` to endpoints, set `WAZUH_MANAGER`, and configure enrollment/auth/group policy in Wazuh.
-- **Salt:** run/connect Salt master, expose `4505`/`4506`, set `SALT_MASTER`, and accept or preseed minion keys.
+The bundled stack writes runtime values automatically. Use the portal **Integrations** view while in Platform admin role only to override generated values for external services or custom installers.
 
 Linux-specific installer URLs can be passed to the API container with these environment variables:
 
-- `MESHCENTRAL_MESH_ID` to let FizRMM derive MeshCentral agent URLs from the public MeshCentral endpoint. For the bundled Docker stack, create a MeshCentral device group, copy its `mesh/...` identifier from the MeshCentral **Add Agent** URL, set this value, then create a new enrollment.
+- `MESHCENTRAL_MESH_ID` to pin MeshCentral agent URLs to a specific MeshCentral device group when required.
 - `MESHCENTRAL_PUBLIC_URL` or `MESHCENTRAL_PUBLIC_PORT` if endpoints should download MeshCentral agents from a different public URL than `https://<portal-host>:8443`.
 - `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` / `MESHCENTRAL_LINUX_AGENT_INSTALL_ARGS` to override the derived MeshCentral Linux installer URL and command entirely.
 - `ZABBIX_LINUX_AGENT_INSTALLER_URL` / `ZABBIX_LINUX_AGENT_INSTALL_ARGS`
 - `WAZUH_LINUX_AGENT_INSTALLER_URL` / `WAZUH_LINUX_AGENT_INSTALL_ARGS`
 - `SALT_LINUX_MINION_INSTALLER_URL` / `SALT_LINUX_MINION_INSTALL_ARGS`
 
-The Linux bootstrapper only uses Linux-specific URLs. It does not fall back to generic `*_INSTALLER_URL` values because those are often Windows `.exe` installers. By default, if neither `MESHCENTRAL_MESH_ID` nor `MESHCENTRAL_LINUX_AGENT_INSTALLER_URL` is set, FizRMM claims/reports the endpoint and marks MeshCentral as `skipped_no_installer_url` so enrollment can still complete. Set `FIZRMM_REQUIRE_MESHCENTRAL_AGENT=true` only when you want bootstrap claim requests to fail until MeshCentral installation is configured. Set `FIZRMM_INSTALL_BUILTIN_AGENTS=false` on the endpoint only when you want to test claim/report without installing the built-in Zabbix, Wazuh, and Salt agents.
+The Linux bootstrapper only uses Linux-specific URLs. It does not fall back to generic `*_INSTALLER_URL` values because those are often Windows `.exe` installers. Set `FIZRMM_INSTALL_BUILTIN_AGENTS=false` on the endpoint only when you want to test claim/report without installing the built-in Zabbix, Wazuh, and Salt agents.
 
 ## Network Requirements
 

@@ -151,7 +151,14 @@ def mark_service_reachability(
             continue
         init_state = integration.setdefault("init", {})
         if isinstance(init_state, dict):
-            init_state["service_reachable"] = service_name in reached_services
+            reachable = service_name in reached_services
+            init_state["service_reachable"] = reachable
+            if reachable:
+                init_state["status"] = "configured"
+                init_state["message"] = f"{service_name} is reachable and its FizRMM runtime config is active."
+            else:
+                init_state["status"] = "degraded"
+                init_state["message"] = f"{service_name} was not reachable during FizRMM stack initialization."
 
 
 def mark_runtime_config_written(config: dict[str, Any]) -> dict[str, Any]:
@@ -163,6 +170,8 @@ def mark_runtime_config_written(config: dict[str, Any]) -> dict[str, Any]:
             continue
         init_state = integration.setdefault("init", {})
         if isinstance(init_state, dict):
+            init_state.setdefault("status", "configured")
+            init_state.setdefault("message", "Integration runtime config is active.")
             init_state["runtime_config_written"] = True
     config["generated_by"] = "fizrmm-init"
     config["generated_at_unix"] = int(time.time())

@@ -86,7 +86,18 @@ def meshcentral_installer_defaults(portal_url: str, mesh_id: str = "") -> dict[s
         "installer_url": "",
         "install_args": "",
     }
-    if not public_url or not resolved_mesh_id:
+    if not public_url:
+        return defaults
+    if not resolved_mesh_id:
+        defaults.update(
+            {
+                "linux_installer_url": f"{public_url}/meshagents?id=6&installflags=0",
+                "linux_install_args": '"$INSTALLER_PATH" -install',
+                "linux_insecure_tls": env_value("MESHCENTRAL_LINUX_INSECURE_TLS", "true"),
+                "installer_url": f"{public_url}/meshagents?id=4&installflags=0",
+                "install_args": "{INSTALLER_PATH} -fullinstall",
+            }
+        )
         return defaults
     encoded_mesh_id = quote(resolved_mesh_id, safe="")
     defaults.update(
@@ -393,7 +404,22 @@ def configure_integration(context: TenantContext, integration_id: str, payload: 
     return {"integration": integration, "status": integration_status()}
 
 
+def ensure_runtime_integrations(config: dict[str, object]) -> None:
+    for integration_id in INTEGRATION_SETUP_FIELDS:
+        runtime = _runtime_integration(integration_id)
+        init = runtime.get("init", {}) if isinstance(runtime.get("init"), dict) else {}
+        if _is_initialized(runtime):
+            continue
+        defaults = integration_setup_defaults(integration_id, config)
+        save_runtime_integration(integration_id, defaults.get("service", {}), defaults.get("bootstrap", {}))
+        if integration_id in {"identity", "opensearch", "nats"} or not init:
+            continue
+        run_runtime_setup(integration_id)
+
+
 def integration_status() -> dict[str, object]:
+    config = deployment_config()
+    ensure_runtime_integrations(config)
     config = deployment_config()
     runtime_config = load_runtime_config()
     identity_missing = [
@@ -408,7 +434,7 @@ def integration_status() -> dict[str, object]:
             "MeshCentral",
             config["meshcentral"],  # type: ignore[index]
             required=("server_url",),
-            bootstrap_required=("mesh_id or linux_installer_url",),
+            bootstrap_required=("linux_installer_url",),
         ),
         _agent_integration(
             "zabbix",
