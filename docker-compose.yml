@@ -99,6 +99,8 @@ services:
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-password}
     ports:
       - "8080:8080"
     depends_on:
@@ -147,7 +149,8 @@ services:
   salt-master:
     profiles: ["integrations"]
     image: saltstack/salt:latest
-    command: ["salt-master", "--config-dir=/etc/salt", "--log-level=info"]
+    environment:
+      SALT_SHARED_SECRET: ${SALT_SHARED_SECRET:-fizrmm-salt-dev-secret}
     ports:
       - "4505:4505"
       - "4506:4506"
@@ -213,6 +216,11 @@ services:
     profiles: ["integrations"]
     image: wazuh/wazuh-manager:${WAZUH_MANAGER_VERSION:-4.14.5}
     hostname: wazuh-manager
+    environment:
+      INDEXER_URL: http://opensearch:9200
+      INDEXER_USERNAME: ${WAZUH_INDEXER_USERNAME:-admin}
+      INDEXER_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-FizRMM-dev-password-1!}
+      FILEBEAT_SSL_VERIFICATION_MODE: none
     ports:
       - "1514:1514"
       - "1515:1515"
@@ -228,7 +236,7 @@ services:
     environment:
       FIZRMM_INIT_CONFIG: /init/config.json
       FIZRMM_INTEGRATIONS_FILE: /runtime/fizrmm/integrations.json
-      FIZRMM_INIT_WAIT_TIMEOUT: ${FIZRMM_INIT_WAIT_TIMEOUT:-600}
+      FIZRMM_INIT_WAIT_TIMEOUT: ${FIZRMM_INIT_WAIT_TIMEOUT:-240}
       FIZRMM_INIT_WAIT_SERVICES: ${FIZRMM_INIT_WAIT_SERVICES:-keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch}
       FIZRMM_INIT_REQUIRED_SERVICES: ${FIZRMM_INIT_REQUIRED_SERVICES:-keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}

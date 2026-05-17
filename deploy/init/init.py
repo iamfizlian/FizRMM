@@ -12,7 +12,7 @@ from keycloak import KeycloakInit
 
 CONFIG_PATH = Path(os.getenv("FIZRMM_INIT_CONFIG", "/init/config.json"))
 OUTPUT_PATH = Path(os.getenv("FIZRMM_INTEGRATIONS_FILE", "/runtime/fizrmm/integrations.json"))
-WAIT_TIMEOUT_SECONDS = int(os.getenv("FIZRMM_INIT_WAIT_TIMEOUT", "600"))
+WAIT_TIMEOUT_SECONDS = int(os.getenv("FIZRMM_INIT_WAIT_TIMEOUT", "240"))
 DEFAULT_REQUIRED_SERVICES = "keycloak,nats,meshcentral,salt,zabbix,wazuh,opensearch"
 
 
