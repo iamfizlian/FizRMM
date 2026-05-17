@@ -127,7 +127,6 @@ services:
       discovery.type: single-node
       compatibility.override_main_response_version: "true"
       cluster.routing.allocation.disk.threshold_enabled: "false"
-      plugins.security.disabled: "true"
       DISABLE_SECURITY_PLUGIN: "true"
       OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-FizRMM-dev-password-1!}
       OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
