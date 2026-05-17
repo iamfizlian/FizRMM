@@ -54,6 +54,8 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn('pacman -U --noconfirm "$target"', script)
         self.assertIn('dpkg -i "$target"', script)
         self.assertIn("*.rpm", script)
+        self.assertIn('FIZRMM_AGENT_DOWNLOAD_DIR:-/var/tmp', script)
+        self.assertIn('chmod +x "$target"', script)
 
     def test_rendered_linux_bootstrap_runs_against_api(self):
         import os

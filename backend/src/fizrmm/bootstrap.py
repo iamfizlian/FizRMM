@@ -358,6 +358,7 @@ install_downloaded_agent() {{
   local target="$2"
   local install_args="$3"
   local url_path="${{installer_url%%\\?*}}"
+  chmod +x "$target"
   if [ -n "$install_args" ]; then
     INSTALLER_PATH="$target" sh -c "$install_args"
   elif [[ "$url_path" == *.pkg.tar.zst ]] || [[ "$url_path" == *.pkg.tar.xz ]] || [[ "$url_path" == *.pkg.tar.gz ]]; then
@@ -375,7 +376,6 @@ install_downloaded_agent() {{
       rpm -Uvh "$target"
     fi
   else
-    chmod +x "$target"
     "$target"
   fi
 }}
@@ -402,7 +402,8 @@ install_agent() {{
     log_step "Skipping $agent because no Linux installer URL was provided by the portal."
     status="skipped_no_installer_url"
   else
-    target="/tmp/fizrmm-$agent-installer"
+    mkdir -p "${{FIZRMM_AGENT_DOWNLOAD_DIR:-/var/tmp}}"
+    target="${{FIZRMM_AGENT_DOWNLOAD_DIR:-/var/tmp}}/fizrmm-$agent-installer"
     log_step "Downloading $agent installer."
     printf '[%s] %s installer URL: %s\n' "$(date -Is 2>/dev/null || date)" "$agent" "$installer_url" >> "$LOG_FILE"
     curl_flags="-fL"
