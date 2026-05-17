@@ -285,6 +285,21 @@ function App() {
     }
   }
 
+  async function refreshAssetsAfterDelete(deletedAssetId) {
+    try {
+      const assetPayload = await api("/api/assets", orgId, role);
+      setAssets(assetPayload.assets);
+      const nextAsset = assetPayload.assets.find((asset) => asset.id !== deletedAssetId) || null;
+      setSelectedAssetId(nextAsset?.id || null);
+      setAssetDetail(null);
+      setAgents([]);
+      setTimeline([]);
+      setNotice(`Removed endpoint ${deletedAssetId}`);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
   async function refreshAssetDetail(assetId) {
     try {
       const [detailPayload, agentPayload, timelinePayload] = await Promise.all([
@@ -339,13 +354,14 @@ function App() {
     const assetId = selectedAsset.id;
     if (!window.confirm(`Remove endpoint ${selectedAsset.hostname} (${assetId}) from FizRMM?`)) return;
     try {
-      await api(`/api/assets/${assetId}`, orgId, role, { method: "DELETE" });
+      setNotice(`Removing endpoint ${assetId}`);
+      const payload = await api(`/api/assets/${assetId}/delete`, orgId, role, { method: "POST" });
+      setLastAction({ type: "Endpoint removed", payload });
       setSelectedAssetId(null);
       setAssetDetail(null);
       setAgents([]);
       setTimeline([]);
-      setNotice(`Removed endpoint ${assetId}`);
-      refreshAssets();
+      await refreshAssetsAfterDelete(assetId);
     } catch (error) {
       setNotice(error.message);
     }

@@ -847,6 +847,8 @@ class FizRmmHandler(BaseHTTPRequestHandler):
                 asset_id=parts[2],
                 script_id=payload.get("script_id", ""),
             )
+        if len(parts) == 4 and parts[:2] == ["api", "assets"] and parts[3] == "delete":
+            return STORE.delete_asset(context, parts[2])  # type: ignore[attr-defined]
         raise NotFound("route not found")
 
     def _route_delete(self, context: TenantContext, parts: list[str]) -> Any:
