@@ -126,7 +126,7 @@ class PostgresControlPlaneStore:
 
     def delete_asset(self, context: TenantContext, asset_id: str) -> dict[str, str]:
         asset = self.get_asset(context, asset_id)
-        with self._cursor(context) as cur:
+        with self._system_cursor() as cur:
             cur.execute("update endpoint_enrollments set asset_id = null where asset_id = %s", (asset.id,))
             cur.execute(
                 """
@@ -138,6 +138,8 @@ class PostgresControlPlaneStore:
                 (asset.id, asset.id),
             )
             cur.execute("delete from assets where id = %s", (asset.id,))
+            if cur.rowcount != 1:
+                raise NotFound(f"asset not found: {asset.id}")
         return {"asset_id": asset.id, "status": "deleted"}
 
     def list_connectors(self, context: TenantContext, asset_id: str) -> list[ConnectorIdentity]:

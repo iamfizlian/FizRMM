@@ -746,8 +746,8 @@ class FizRmmHandler(BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
         except (KeyError, TypeError) as exc:
             self._send_json({"error": f"invalid request: {exc}"}, status=HTTPStatus.BAD_REQUEST)
-        except Exception:
-            self._send_json({"error": "internal server error"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+        except Exception as exc:
+            self._send_json({"error": f"internal server error: {exc}"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
     def _route_get(self, context: TenantContext, parts: list[str]) -> Any:
         if parts == ["health"]:

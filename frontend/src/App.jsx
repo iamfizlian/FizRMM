@@ -352,7 +352,6 @@ function App() {
   async function deleteSelectedAsset() {
     if (!selectedAsset?.id) return;
     const assetId = selectedAsset.id;
-    if (!window.confirm(`Remove endpoint ${selectedAsset.hostname} (${assetId}) from FizRMM?`)) return;
     try {
       setNotice(`Removing endpoint ${assetId}`);
       const payload = await api(`/api/assets/${assetId}/delete`, orgId, role, { method: "POST" });
@@ -363,6 +362,7 @@ function App() {
       setTimeline([]);
       await refreshAssetsAfterDelete(assetId);
     } catch (error) {
+      setLastAction({ type: "Endpoint removal failed", payload: { asset_id: assetId, error: error.message } });
       setNotice(error.message);
     }
   }
